@@ -1,7 +1,9 @@
+// Shared TypeScript models used by pages, components, and API clients.
 export type ScopeType = "Scope 1" | "Scope 2" | "Scope 3";
 
 export type UserRole = "ADMIN" | "COMPANY_USER";
 
+// The safe user information returned after backend login.
 export interface AuthenticatedUser {
   id: string;
   email: string;
@@ -24,6 +26,7 @@ export interface ReportBreakdown {
   co2e: number;
 }
 
+// Aggregated backend result shown on the reports screen.
 export interface EmissionsReport {
   companyId: string;
   period: { from: string; to: string; label: string };
@@ -43,6 +46,7 @@ export type EmissionCategory =
 
 export type EmissionStatus = "Verified" | "Pending" | "Needs Review";
 
+// One saved emissions activity record from the backend database.
 export interface EmissionRecord {
   id: string;
   date: string;
@@ -58,6 +62,7 @@ export interface EmissionRecord {
   isNew?: boolean;
 }
 
+// Form values sent to the backend calculation and save endpoints.
 export interface EmissionCalculationInput {
   category: EmissionCategory;
   scope: ScopeType;
@@ -67,6 +72,7 @@ export interface EmissionCalculationInput {
   facility: string;
 }
 
+// Transparent calculation details returned by the backend.
 export interface CalculationResult {
   input: string;
   unit: string;
@@ -91,6 +97,7 @@ export type ProjectCategory =
   | "Clean Cookstoves"
   | "Blue Carbon";
 
+// Marketplace and transaction models currently support the prototype UI.
 export interface MarketplaceProject {
   id: string;
   name: string;
@@ -140,6 +147,7 @@ export interface TransactionRecord {
 export type ReportType = "All Reports" | "Emissions" | "Sustainability" | "Offsets" | "Compliance";
 export type ReportStatus = "Ready" | "Processing" | "Scheduled";
 
+// A report-library row used by the reports interface.
 export interface ReportRecord {
   id: string;
   name: string;
@@ -153,6 +161,7 @@ export interface ReportRecord {
   summary?: string;
 }
 
+// Organization information displayed in the dashboard shell.
 export interface OrganizationContext {
   id: string;
   name: string;
