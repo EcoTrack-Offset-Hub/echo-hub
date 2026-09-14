@@ -20,7 +20,8 @@ export const ProgressGauge: React.FC<ProgressGaugeProps> = ({
   const strokeWidth = 14;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const dashoffset = circumference - (percentage / 100) * circumference;
+  const safePercentage = Number.isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
+  const dashoffset = circumference - (safePercentage / 100) * circumference;
 
   return (
     <div className={cn("bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between", className)}>
@@ -57,7 +58,7 @@ export const ProgressGauge: React.FC<ProgressGaugeProps> = ({
 
           {/* Center text */}
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-            <span className="text-xl font-extrabold text-[#111827]">{percentage}%</span>
+            <span className="text-xl font-extrabold text-[#111827]">{safePercentage}%</span>
             <span className="text-[10px] text-[#6B7280]">of target</span>
           </div>
         </div>

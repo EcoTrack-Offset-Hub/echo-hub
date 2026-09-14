@@ -64,7 +64,8 @@ export default function MarketplacePage() {
   }, [selectedCategoryPill, selectedStandard, searchQuery]);
 
   useEffect(() => {
-    loadProjects();
+    const timer = window.setTimeout(() => { void loadProjects(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadProjects]);
 
   const handleOpenPurchase = (proj: MarketplaceProject) => {

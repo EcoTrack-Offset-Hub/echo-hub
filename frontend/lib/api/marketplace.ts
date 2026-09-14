@@ -34,7 +34,7 @@ export const marketplaceApi = {
     if (filters?.search) params.set("search", filters.search);
 
     const query = params.toString() ? `?${params.toString()}` : "";
-    const res = await apiClient<MarketplaceResponseData>(`/api/marketplace${query}`);
+    const res = await apiClient<MarketplaceResponseData>(`/api/marketplace${query}`, {}, true);
     return res.projects;
   },
 
@@ -46,7 +46,7 @@ export const marketplaceApi = {
     const res = await apiClient<PurchaseResult>("/api/marketplace/purchase", {
       method: "POST",
       body: JSON.stringify({ projectId, quantityTCO2e }),
-    });
+    }, true);
     return res.order;
   },
 

@@ -58,7 +58,8 @@ export default function TransactionsPage() {
   }, [selectedStatus, selectedProject, searchQuery]);
 
   useEffect(() => {
-    loadTransactions();
+    const timer = window.setTimeout(() => { void loadTransactions(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadTransactions]);
 
   const handleOpenCertificate = (txn: TransactionRecord) => {

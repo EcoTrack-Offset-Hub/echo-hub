@@ -207,7 +207,7 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
             disabled={isCalculating}
             leftIcon={<Calculator className="w-4 h-4" />}
           >
-            Calculate & Review
+            {isCalculating ? "Calculating..." : "Calculate & Review"}
           </Button>
         </div>
       </form>

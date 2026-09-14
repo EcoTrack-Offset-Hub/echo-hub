@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { AuthSessionProvider } from "@/lib/auth/AuthSessionProvider";
 
 export default function DashboardLayout({
   children,
@@ -9,8 +11,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const router = useRouter();
+  const redirectToLogin = React.useCallback(() => router.replace("/login"), [router]);
 
   return (
+    <AuthSessionProvider onInvalidSession={redirectToLogin}>
     <div className="min-h-screen bg-[#F8FAF8] flex">
       {/* Sidebar navigation */}
       <Sidebar
@@ -23,5 +28,6 @@ export default function DashboardLayout({
         {children}
       </div>
     </div>
+    </AuthSessionProvider>
   );
 }

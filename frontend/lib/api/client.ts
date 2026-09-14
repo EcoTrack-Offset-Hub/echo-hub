@@ -25,22 +25,35 @@ export class ApiError extends Error {
  */
 export async function apiClient<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  useLocalRoute = false
 ): Promise<T> {
   // Normalize base URL: if external API configured, prefix endpoint; otherwise use relative /api
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
-    ? process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")
-    : "";
+  const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
 
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
-  // If baseUrl is set and doesn't already contain /api/v1 while endpoint does, adapt gracefully
-  const url = baseUrl ? `${baseUrl}${cleanEndpoint.replace(/^\/api(\/v1)?/, "")}` : cleanEndpoint;
+  let url: string;
+  if (useLocalRoute) {
+    url = cleanEndpoint;
+  } else if (baseUrl) {
+    if (baseUrl.endsWith("/api") || baseUrl.endsWith("/api/v1")) {
+      url = `${baseUrl}${cleanEndpoint.replace(/^\/api(\/v1)?/, "")}`;
+    } else {
+      url = `${baseUrl}${cleanEndpoint}`;
+    }
+  } else {
+    url = cleanEndpoint;
+  }
 
   const headers = new Headers(options.headers || {});
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   headers.set("Accept", "application/json");
+  if (typeof window !== "undefined") {
+    const token = window.localStorage.getItem("ecotrack_auth_token");
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+  }
 
   try {
     const response = await fetch(url, {
@@ -55,10 +68,23 @@ export async function apiClient<T>(
     }
 
     if (!response.ok) {
-      const errorMsg =
+      let errorMsg =
         (jsonResponse && typeof jsonResponse === "object" && "error" in jsonResponse && jsonResponse.error) ||
-        (jsonResponse && typeof jsonResponse === "object" && "message" in jsonResponse && (jsonResponse as { message?: string }).message) ||
-        `Request failed with status ${response.status}`;
+        (jsonResponse && typeof jsonResponse === "object" && "message" in jsonResponse && (jsonResponse as { message?: string }).message);
+
+      if (!errorMsg) {
+        if (response.status === 400) {
+          errorMsg = "Please check the entered data.";
+        } else if (response.status === 401 || response.status === 403) {
+          errorMsg = "Unauthorized: Access denied.";
+        } else if (response.status === 404) {
+          errorMsg = "Requested resource not found.";
+        } else if (response.status >= 500) {
+          errorMsg = "Unable to save emissions data. Please try again.";
+        } else {
+          errorMsg = `Request failed with status ${response.status}`;
+        }
+      }
 
       const details =
         jsonResponse && typeof jsonResponse === "object" && "details" in jsonResponse
@@ -82,7 +108,7 @@ export async function apiClient<T>(
     if (err instanceof ApiError) {
       throw err;
     }
-    const message = err instanceof Error ? err.message : "Network error. Unable to connect to EcoTrack server.";
+    const message = "Unable to connect to the EcoTrack backend.";
     throw new ApiError(message, 0);
   }
 }

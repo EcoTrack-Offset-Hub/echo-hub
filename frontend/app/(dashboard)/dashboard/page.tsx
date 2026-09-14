@@ -7,6 +7,7 @@ import { EmissionsTrendChart } from "@/components/charts/EmissionsTrendChart";
 import { ScopeDonutChart } from "@/components/charts/ScopeDonutChart";
 import { ProgressGauge } from "@/components/charts/ProgressGauge";
 import { dashboardApi, DashboardSummaryData } from "@/lib/api/dashboard";
+import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
 import {
   Leaf,
   CloudSun,
@@ -30,6 +31,7 @@ import {
 } from "lucide-react";
 
 export default function DashboardPage() {
+  const { user, selectedCompanyId } = useAuthSession();
   const [selectedPeriod, setSelectedPeriod] = useState("Current Period");
   const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
   const [summary, setSummary] = useState<DashboardSummaryData | null>(null);
@@ -49,7 +51,7 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await dashboardApi.getSummary(selectedPeriod);
+      const data = await dashboardApi.getSummary(selectedPeriod, user.role === "ADMIN" ? selectedCompanyId : undefined);
       setSummary(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Backend connection unavailable.";
@@ -57,10 +59,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedPeriod]);
+  }, [selectedPeriod, selectedCompanyId, user.role]);
 
   useEffect(() => {
-    loadSummary();
+    const timer = window.setTimeout(() => { void loadSummary(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadSummary]);
 
   return (
@@ -107,11 +110,11 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight flex items-center gap-3">
-              <span>Good morning, Jordan</span>
+              <span>{user.role === "ADMIN" ? "Welcome back, Admin" : "Welcome back"}</span>
               {loading && <Loader2 className="w-5 h-5 text-[#2E7D32] animate-spin" />}
             </h2>
             <p className="text-sm text-[#5F6B61] mt-0.5">
-              Here&apos;s your sustainability performance overview.
+              Here&apos;s {selectedCompanyId === "company-b" ? "Company B's" : "Company A's"} sustainability performance overview.
             </p>
           </div>
 
@@ -256,7 +259,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               {/* Emissions Trend Line Chart (6 cols) */}
               <div className="lg:col-span-6">
-                <EmissionsTrendChart className="h-full" />
+                <EmissionsTrendChart className="h-full" data={summary.trendSeries} />
               </div>
 
               {/* Scope Donut Chart (3 cols) */}

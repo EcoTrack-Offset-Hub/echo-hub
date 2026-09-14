@@ -101,7 +101,7 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
             <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#9CA3AF] flex items-center justify-center">
               <Inbox className="w-5 h-5" />
             </div>
-            <p className="text-xs font-semibold text-[#374151]">No emissions records found.</p>
+            <p className="text-xs font-semibold text-[#374151]">No emissions records yet.</p>
             <p className="text-[11px] text-[#6B7280]">
               Adjust your filters or add a new emission activity to get started.
             </p>

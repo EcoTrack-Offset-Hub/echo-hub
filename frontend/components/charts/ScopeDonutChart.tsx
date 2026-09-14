@@ -35,7 +35,9 @@ export const ScopeDonutChart: React.FC<ScopeDonutChartProps> = ({
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  let accumulatedPercent = 0;
+  const safeSegments = segments
+    .filter((segment) => Number.isFinite(Number(segment.percentage)))
+    .map((segment) => ({ ...segment, percentage: Math.max(0, Math.min(100, Number(segment.percentage))) }));
 
   return (
     <div className={cn("bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between", className)}>
@@ -46,10 +48,10 @@ export const ScopeDonutChart: React.FC<ScopeDonutChartProps> = ({
       <div className="flex items-center justify-center py-4">
         <div className="relative w-40 h-40 flex items-center justify-center">
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
-            {segments.map((seg, idx) => {
+            {safeSegments.map((seg, idx) => {
+              const accumulatedPercent = safeSegments.slice(0, idx).reduce((total, item) => total + item.percentage, 0);
               const dashLength = (seg.percentage / 100) * circumference;
               const dashOffset = (accumulatedPercent / 100) * circumference;
-              accumulatedPercent += seg.percentage;
 
               return (
                 <circle
@@ -78,7 +80,7 @@ export const ScopeDonutChart: React.FC<ScopeDonutChartProps> = ({
 
       {/* Legend list */}
       <div className="space-y-1.5 pt-2 border-t border-[#F3F4F6] text-xs">
-        {segments.map((s) => (
+        {safeSegments.map((s) => (
           <div key={s.scope} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />

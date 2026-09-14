@@ -31,11 +31,13 @@ export const emissionsApi = {
     scope?: string;
     category?: string;
     search?: string;
+    companyId?: string;
   }): Promise<EmissionsResponseData> {
     const params = new URLSearchParams();
     if (filters?.scope && filters.scope !== "All Scopes") params.set("scope", filters.scope);
     if (filters?.category && filters.category !== "All Categories") params.set("category", filters.category);
     if (filters?.search) params.set("search", filters.search);
+    if (filters?.companyId) params.set("companyId", filters.companyId);
 
     const query = params.toString() ? `?${params.toString()}` : "";
     return apiClient<EmissionsResponseData>(`/api/emissions${query}`);
@@ -66,11 +68,12 @@ export const emissionsApi = {
    * Saves emission activity into the backend database ledger
    */
   async createRecord(
-    inputOrCalculation: EmissionCalculationInput | CalculationResult
+    inputOrCalculation: EmissionCalculationInput | CalculationResult,
+    companyId?: string
   ): Promise<EmissionCreateResult> {
     return apiClient<EmissionCreateResult>("/api/emissions", {
       method: "POST",
-      body: JSON.stringify(inputOrCalculation),
+      body: JSON.stringify(companyId ? { ...inputOrCalculation, companyId } : inputOrCalculation),
     });
   },
 

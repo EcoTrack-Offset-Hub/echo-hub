@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { ReportRecord } from "@/types";
-import { reportsApi } from "@/lib/api/reports";
 import { FileText, Download } from "lucide-react";
 
 interface GenerateReportModalProps {
@@ -27,23 +26,13 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   const [period, setPeriod] = useState("Q3 2026");
   const [format, setFormat] = useState<"PDF" | "CSV" | "Excel">("PDF");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsGenerating(true);
-    try {
-      const newRep = await reportsApi.generateReport({
-        name,
-        type,
-        period,
-        summary: `Exported ${type} report for ${period} in ${format} format.`,
-      });
-      if (onCreated) onCreated(newRep);
-      if (onReportGenerated) onReportGenerated(newRep);
-      onClose();
-    } finally {
-      setIsGenerating(false);
-    }
+    setError("Custom report generation is not available yet. Use the authenticated emissions report export instead.");
+    setIsGenerating(false);
   };
 
   return (
@@ -117,6 +106,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
             Generated report includes cryptographic ledger timestamps and verified GHG Protocol conversion factors.
           </p>
         </div>
+        {error && <p role="alert" className="text-xs font-medium text-[#B91C1C]">{error}</p>}
 
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E2E8E3]">
           <Button type="button" variant="outline" onClick={onClose} disabled={isGenerating}>

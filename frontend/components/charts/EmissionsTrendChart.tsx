@@ -10,9 +10,10 @@ export interface TrendDataPoint {
 
 interface EmissionsTrendChartProps {
   className?: string;
+  data?: TrendDataPoint[];
 }
 
-export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({ className }) => {
+export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({ className, data }) => {
   const [period, setPeriod] = useState<"3M" | "6M" | "12M">("6M");
 
   const data6M: TrendDataPoint[] = [
@@ -45,20 +46,27 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({ classN
     { month: "Jun", emissions: 2300 },
   ];
 
-  const currentData = period === "3M" ? data3M : period === "12M" ? data12M : data6M;
+  const fallbackData = period === "3M" ? data3M : period === "12M" ? data12M : data6M;
+  const currentData = (data ?? fallbackData)
+    .filter((point) => typeof point.month === "string" && Number.isFinite(point.emissions))
+    .map((point) => ({ month: point.month, emissions: Number(point.emissions) }));
 
   // SVG dimensions
   const width = 580;
   const height = 240;
   const padding = { top: 20, right: 25, bottom: 35, left: 45 };
 
-  const minVal = 1500;
-  const maxVal = 4000;
+  const values = currentData.map((point) => point.emissions);
+  const minValue = values.length > 0 ? Math.min(...values) : 0;
+  const maxValue = values.length > 0 ? Math.max(...values) : 1;
+  const paddingValue = Math.max((maxValue - minValue) * 0.1, 1);
+  const minVal = minValue - paddingValue;
+  const maxVal = maxValue + paddingValue;
   const yRange = maxVal - minVal;
 
   const getX = (index: number) => {
     const usableWidth = width - padding.left - padding.right;
-    return padding.left + (index / (currentData.length - 1)) * usableWidth;
+    return currentData.length <= 1 ? padding.left + usableWidth / 2 : padding.left + (index / (currentData.length - 1)) * usableWidth;
   };
 
   const getY = (val: number) => {
@@ -69,7 +77,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({ classN
 
   // Build SVG path
   const points = currentData.map((d, i) => `${getX(i)},${getY(d.emissions)}`).join(" ");
-  const areaPath = `${points} L ${getX(currentData.length - 1)},${height - padding.bottom} L ${getX(0)},${height - padding.bottom} Z`;
+  const areaPath = currentData.length > 1 ? `${points} L ${getX(currentData.length - 1)},${height - padding.bottom} L ${getX(0)},${height - padding.bottom} Z` : "";
 
   const yTicks = [4000, 3500, 3000, 2500, 2000, 1500];
 
@@ -139,17 +147,17 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({ classN
           })}
 
           {/* Area fill */}
-          <polygon points={areaPath} fill="url(#trendGradient)" />
+          {areaPath && <polygon points={areaPath} fill="url(#trendGradient)" />}
 
           {/* Line stroke */}
-          <polyline
+          {points && <polyline
             fill="none"
             stroke="#2E7D32"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             points={points}
-          />
+          />}
 
           {/* Data Points */}
           {currentData.map((d, i) => {

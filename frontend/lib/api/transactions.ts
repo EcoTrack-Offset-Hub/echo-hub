@@ -22,7 +22,7 @@ export const transactionsApi = {
     if (filters?.search) params.set("search", filters.search);
 
     const query = params.toString() ? `?${params.toString()}` : "";
-    const res = await apiClient<TransactionsResponseData>(`/api/transactions${query}`);
+    const res = await apiClient<TransactionsResponseData>(`/api/transactions${query}`, {}, true);
     return res.transactions;
   },
 };

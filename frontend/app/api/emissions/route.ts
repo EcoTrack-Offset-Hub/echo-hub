@@ -3,8 +3,52 @@ import { CalculationResult, EmissionRecord } from "@/types";
 import { initialEmissionsRecords, emissionsSummary } from "@/lib/mock/emissions";
 import { SERVER_EMISSION_FACTORS } from "./calculate/route";
 
-// Server-side database store (PostgreSQL mock / runtime persistence)
-let serverEmissionsRecords: EmissionRecord[] = [...initialEmissionsRecords];
+// Server-side database store (initialized empty to reflect real database state)
+let serverEmissionsRecords: EmissionRecord[] = [];
+
+function computeSummary(records: EmissionRecord[]) {
+  let totalKg = 0;
+  let s1Kg = 0;
+  let s2Kg = 0;
+  let s3Kg = 0;
+
+  for (const r of records) {
+    let kg = 0;
+    const clean = r.emissions.replace(/,/g, "").trim();
+    const num = parseFloat(clean.replace(/[^\d.-]/g, "")) || 0;
+    kg = clean.includes("kg") ? num : num * 1000;
+
+    totalKg += kg;
+    if (r.scope === "Scope 1") s1Kg += kg;
+    else if (r.scope === "Scope 2") s2Kg += kg;
+    else if (r.scope === "Scope 3") s3Kg += kg;
+  }
+
+  const totalTonnes = totalKg / 1000;
+  const s1T = s1Kg / 1000;
+  const s2T = s2Kg / 1000;
+  const s3T = s3Kg / 1000;
+
+  return {
+    totalEmissions: totalTonnes >= 1 ? totalTonnes.toFixed(1) : totalKg.toFixed(0),
+    totalUnit: totalTonnes >= 1 ? "tCO₂e" : "kg CO₂e",
+    trend: "-8.4% vs last period",
+    scopes: {
+      scope1: {
+        value: `${s1T.toFixed(1)} tCO₂e`,
+        pct: totalKg > 0 ? Math.round((s1Kg / totalKg) * 100) : 0,
+      },
+      scope2: {
+        value: `${s2T.toFixed(1)} tCO₂e`,
+        pct: totalKg > 0 ? Math.round((s2Kg / totalKg) * 100) : 0,
+      },
+      scope3: {
+        value: `${s3T.toFixed(1)} tCO₂e`,
+        pct: totalKg > 0 ? Math.round((s3Kg / totalKg) * 100) : 0,
+      },
+    },
+  };
+}
 
 export async function GET(request: Request) {
   try {
@@ -36,9 +80,9 @@ export async function GET(request: Request) {
       data: {
         records: filtered,
         total: filtered.length,
-        summary: emissionsSummary,
+        summary: computeSummary(filtered),
       },
-    });
+    }, { status: 200 });
   } catch {
     return NextResponse.json(
       {
@@ -68,10 +112,10 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             success: false,
-            error: "Validation error: consumption must be greater than zero.",
+            error: "Please check the entered data: consumption must be greater than zero.",
             details: { consumption: "Must be a valid positive number." },
           },
-          { status: 422 }
+          { status: 400 }
         );
       }
 
@@ -79,14 +123,14 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             success: false,
-            error: "Validation error: missing required activity metadata.",
+            error: "Please check the entered data: missing required activity metadata.",
             details: {
               unit: !body.unit ? "Unit is required." : "",
               facility: !body.facility ? "Facility is required." : "",
               reportingPeriod: !body.reportingPeriod ? "Reporting period is required." : "",
             },
           },
-          { status: 422 }
+          { status: 400 }
         );
       }
 
@@ -143,7 +187,7 @@ export async function POST(request: Request) {
         calculation,
         totalRecords: serverEmissionsRecords.length,
       },
-    });
+    }, { status: 201 });
   } catch {
     return NextResponse.json(
       {

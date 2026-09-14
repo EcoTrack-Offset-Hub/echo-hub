@@ -116,6 +116,7 @@ export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = (
             type="button"
             variant="ghost"
             onClick={onBack}
+            disabled={isSaving}
             leftIcon={<ArrowLeft className="w-4 h-4" />}
           >
             Back to Edit
@@ -125,10 +126,11 @@ export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = (
             type="button"
             variant="primary"
             isLoading={isSaving}
+            disabled={isSaving}
             onClick={handleSave}
             leftIcon={<Check className="w-4 h-4" />}
           >
-            Save Data
+            {isSaving ? "Saving..." : "Save Data"}
           </Button>
         </div>
       </div>

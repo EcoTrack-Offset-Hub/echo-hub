@@ -91,7 +91,7 @@ export async function POST(request: Request) {
           error: "Backend validation failed for emission calculation input.",
           details,
         },
-        { status: 422 }
+        { status: 400 }
       );
     }
 

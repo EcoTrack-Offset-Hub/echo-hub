@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { authService } from "@/lib/api/auth";
+import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -29,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, selectedCompanyId } = useAuthSession();
 
   const navItems = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -110,11 +112,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="pt-2 border-t border-[#E5E7EB] flex items-center justify-between px-2">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-full bg-[#E8F5E9] flex items-center justify-center text-xs font-bold text-[#2E7D32] border border-[#C8E6C9] flex-shrink-0">
-              JD
+              {user.role === "ADMIN" ? "AD" : user.email.slice(0, 2).toUpperCase()}
             </div>
             <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-[#111827] truncate">Jordan Davis</p>
-              <p className="text-[10px] text-[#6B7280] truncate">Sustainability Mgr</p>
+              <p className="text-xs font-semibold text-[#111827] truncate">{user.role === "ADMIN" ? "Administrator" : user.email}</p>
+              <p className="text-[10px] text-[#6B7280] truncate">{user.role === "ADMIN" ? "Admin" : selectedCompanyId === "company-b" ? "Company B" : "Company A"}</p>
             </div>
           </div>
           <button

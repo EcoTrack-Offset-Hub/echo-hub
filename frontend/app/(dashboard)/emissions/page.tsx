@@ -10,6 +10,7 @@ import { SaveSuccessModal } from "./_components/SaveSuccessModal";
 import { EmissionTable } from "./_components/EmissionTable";
 import { emissionsApi } from "@/lib/api/emissions";
 import { CalculationResult, EmissionCalculationInput, EmissionRecord } from "@/types";
+import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
 import {
   Plus,
   RotateCcw,
@@ -39,6 +40,7 @@ function parseTCO2e(emissionStr: string): number {
 }
 
 export default function EmissionsPage() {
+  const { user, selectedCompanyId } = useAuthSession();
   const [records, setRecords] = useState<EmissionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export default function EmissionsPage() {
   const [calculationError, setCalculationError] = useState<string | null>(null);
   const [activeCalculation, setActiveCalculation] = useState<CalculationResult | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
   const isExternalBackendConfigured = !!process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -67,6 +70,7 @@ export default function EmissionsPage() {
       const response = await emissionsApi.getEmissions({
         scope: selectedScope,
         category: selectedCategory,
+        companyId: user.role === "ADMIN" ? selectedCompanyId : undefined,
       });
       setRecords(response.records || []);
     } catch (err: unknown) {
@@ -75,10 +79,11 @@ export default function EmissionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedScope, selectedCategory]);
+  }, [selectedScope, selectedCategory, selectedCompanyId, user.role]);
 
   useEffect(() => {
-    loadData();
+    const timer = window.setTimeout(() => { void loadData(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadData]);
 
   const handleResetFilters = () => {
@@ -92,6 +97,7 @@ export default function EmissionsPage() {
   const handleProceedToReview = async (input: EmissionCalculationInput) => {
     setIsCalculating(true);
     setCalculationError(null);
+    setErrorNotice(null);
     try {
       const calc = await emissionsApi.calculate(input);
       setActiveCalculation(calc);
@@ -108,16 +114,17 @@ export default function EmissionsPage() {
   // Step 2 -> 3: Review -> POST /api/emissions (Database persistence) -> Frontend updates -> New emission record displayed
   const handleSaveCalculation = async () => {
     if (!activeCalculation) return;
+    setErrorNotice(null);
     try {
-      const res = await emissionsApi.createRecord(activeCalculation);
+      const res = await emissionsApi.createRecord(activeCalculation, user.role === "ADMIN" ? selectedCompanyId : undefined);
       setRecords((prev) => [res.record, ...prev]);
       setIsReviewModalOpen(false);
       setIsSuccessModalOpen(true);
-      setSuccessNotice("Emission record saved successfully.");
+      setSuccessNotice("Saved successfully");
       setTimeout(() => setSuccessNotice(null), 5000);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to save emission record.";
-      alert(message);
+      const message = err instanceof Error ? err.message : "Unable to save emissions data. Please try again.";
+      setErrorNotice(message);
     }
   };
 
@@ -217,13 +224,32 @@ export default function EmissionsPage() {
                 </>
               ) : (
                 <>
-                  <strong>DEMO / SEED DATA MODE:</strong> Values computed dynamically from local
-                  prototype API. Real PostgreSQL not connected.
+                  <strong>POSTGRESQL CONNECTED:</strong> Real PostgreSQL ledger and authoritative GHG Protocol carbon engine active.
                 </>
               )}
             </span>
           </div>
         </div>
+
+        {/* Error Alert Banner */}
+        {errorNotice && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="p-3.5 rounded-2xl bg-[#FEF2F2] border border-[#FEE2E2] flex items-center justify-between gap-3 text-xs text-[#991B1B] font-semibold animate-in fade-in"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
+              <span>{errorNotice}</span>
+            </div>
+            <button
+              onClick={() => setErrorNotice(null)}
+              className="text-[#991B1B] hover:text-[#7F1D1D] cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Success Alert Banner */}
         {successNotice && (

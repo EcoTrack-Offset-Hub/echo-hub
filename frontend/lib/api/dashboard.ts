@@ -1,49 +1,15 @@
 import { apiClient } from "./client";
 
-export interface DashboardKPI {
-  label: string;
-  value: string;
-  unit: string;
-  trend: string;
-  trendDirection: "up" | "down";
-  comparison: string;
-  icon: string;
-  color: string;
+export interface DashboardKPI { label: string; value: string; unit: string; trend: string; trendDirection: "up" | "down"; comparison: string; icon: string; color: string; }
+export interface DashboardSummaryData { period: string; bannerNotice: string; kpis: DashboardKPI[]; trendSeries: Array<{ month: string; emissions: number }>; scopeBreakdown: Array<{ scope: string; percentage: number; amount: number; color: string }>; reductionProgress: { percentage: number; target: string; currentProgress: string; }; offsetStatus?: { totalCreditsPurchased: string; totalRetired: string; portfolioDiversityScore: string; netEmissions: string; }; recordCount: number; }
+interface DashboardResponse { company: { id: string; name: string }; summary: { totalEmissionsTonnes: number; previousPeriodEmissionsTonnes: number | null; changePercent: number | null; recordCount: number }; byCategory: Array<{ category: string; emissionsTonnes: number; percentage: number }>; byScope: Array<{ scope: string; emissionsTonnes: number; percentage: number }>; period: { year: number; month: number | null; label: string }; }
+const scopeColors = ["#2E7D32", "#0284C7", "#9333EA"];
+function toDashboardSummary(data: DashboardResponse): DashboardSummaryData {
+  const change = data.summary.changePercent;
+  const total = data.summary.totalEmissionsTonnes;
+  return { period: data.period.label, recordCount: data.summary.recordCount, bannerNotice: change === null ? "Real-time emissions data is ready for review." : `Emissions are ${Math.abs(change).toFixed(1)}% ${change <= 0 ? "lower" : "higher"} than the previous period.`, kpis: [
+    { label: "Total Carbon Footprint", value: total.toLocaleString(), unit: "tCO₂e", trend: change === null ? "No previous-period comparison" : `${Math.abs(change).toFixed(1)}% vs previous period`, trendDirection: change !== null && change > 0 ? "up" : "down", comparison: `${data.summary.recordCount} verified records`, icon: "leaf", color: "green" },
+    ...data.byScope.map((item, index) => ({ label: item.scope, value: item.emissionsTonnes.toLocaleString(), unit: "tCO₂e", trend: `${item.percentage.toFixed(1)}% of total`, trendDirection: "down" as const, comparison: "Current selected period", icon: ["cloud", "bolt", "truck"][index] || "leaf", color: "green" })),
+  ], trendSeries: data.byCategory.map((item) => ({ month: item.category, emissions: item.emissionsTonnes })), scopeBreakdown: data.byScope.map((item, index) => ({ scope: item.scope, percentage: item.percentage, amount: item.emissionsTonnes, color: scopeColors[index] || "#6B7280" })), reductionProgress: { percentage: change !== null && change < 0 ? Math.abs(change) : 0, target: "Target: Track verified reductions", currentProgress: change === null ? "No previous-period data" : `${Math.abs(change).toFixed(1)}% ${change <= 0 ? "reduction" : "increase"}` }, offsetStatus: { totalCreditsPurchased: "Not connected", totalRetired: "Not connected", portfolioDiversityScore: "—", netEmissions: `${total.toLocaleString()} tCO₂e` } };
 }
-
-export interface DashboardSummaryData {
-  period: string;
-  bannerNotice: string;
-  kpis: DashboardKPI[];
-  trendSeries: Array<{ month: string; emissions: number }>;
-  scopeBreakdown: Array<{ scope: string; percentage: number; amount: number; color: string }>;
-  reductionProgress: {
-    percentage: number;
-    target: string;
-    currentProgress: string;
-  };
-  sustainabilityImpact?: {
-    savedKg: string;
-    equivalentTrees: number;
-    headline: string;
-  };
-  quickActions?: Array<{ title: string; href: string }>;
-  offsetStatus?: {
-    totalCreditsPurchased: string;
-    totalRetired: string;
-    portfolioDiversityScore: string;
-    netEmissions: string;
-  };
-  selectedPeriod?: string;
-}
-
-export const dashboardApi = {
-  /**
-   * GET /api/dashboard
-   * Retrieves aggregated dashboard KPI metrics and trends
-   */
-  async getSummary(period?: string): Promise<DashboardSummaryData> {
-    const query = period ? `?period=${encodeURIComponent(period)}` : "";
-    return apiClient<DashboardSummaryData>(`/api/dashboard${query}`);
-  },
-};
+export const dashboardApi = { async getSummary(period: string, companyId?: string): Promise<DashboardSummaryData> { const params = new URLSearchParams({ period }); if (companyId) params.set("companyId", companyId); const data = await apiClient<DashboardResponse>(`/api/dashboard?${params.toString()}`); return toDashboardSummary(data); } };
