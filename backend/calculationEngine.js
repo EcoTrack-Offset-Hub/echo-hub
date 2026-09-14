@@ -1,4 +1,4 @@
-// Standard GHG Protocol Emission Factors (Authoritative Backend Reference)
+// Authoritative emission factors used by the backend calculation endpoint.
 const SERVER_EMISSION_FACTORS = {
   "Purchased Electricity": {
     factor: 0.42,
@@ -51,9 +51,7 @@ const SERVER_EMISSION_FACTORS = {
   },
 };
 
-/**
- * Normalizes input category to a supported standard GHG category
- */
+// Map user-friendly category text to a supported standard GHG category.
 function normalizeCategory(catStr) {
   if (!catStr) return "Purchased Electricity";
   const lower = String(catStr).toLowerCase().trim();
@@ -81,6 +79,7 @@ function normalizeCategory(catStr) {
   return "Other";
 }
 
+// Convert validated activity data into kg and tonnes CO2e plus audit details.
 function calculateEmissions(input) {
   const category = normalizeCategory(input.category);
   const meta = SERVER_EMISSION_FACTORS[category] || SERVER_EMISSION_FACTORS["Other"];
