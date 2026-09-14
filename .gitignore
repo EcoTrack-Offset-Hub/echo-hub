@@ -26,3 +26,13 @@ yarn-error.log*
 # OS metadata
 .DS_Store
 Thumbs.db
+@"
+.env
+.env.*
+!.env.example
+
+backend/.env
+frontend/.env.local
+
+node_modules/
+"@ | Set-Content .gitignore
