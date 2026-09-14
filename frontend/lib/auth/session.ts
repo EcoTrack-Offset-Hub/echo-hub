@@ -1,8 +1,10 @@
+// Browser-only helpers for the signed-in user and token stored after login.
 import { AuthenticatedUser, UserRole } from "@/types";
 
 const TOKEN_KEY = "ecotrack_auth_token";
 const USER_KEY = "ecotrack_auth_user";
 
+// Validate stored JSON before treating it as an authenticated session.
 function isUserRole(value: unknown): value is UserRole {
   return value === "ADMIN" || value === "COMPANY_USER";
 }
@@ -15,12 +17,14 @@ function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
     && ((user.role === "ADMIN" && user.companyId === null) || (user.role === "COMPANY_USER" && typeof user.companyId === "string"));
 }
 
+// Read the Bearer token safely; server rendering has no browser storage.
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   const token = window.localStorage.getItem(TOKEN_KEY);
   return token && token.trim() ? token : null;
 }
 
+// Read and validate the stored user so malformed local storage cannot crash the UI.
 export function getAuthenticatedUser(): AuthenticatedUser | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(USER_KEY);
@@ -33,11 +37,23 @@ export function getAuthenticatedUser(): AuthenticatedUser | null {
   }
 }
 
-export function getCurrentRole(): UserRole | null { return getAuthenticatedUser()?.role ?? null; }
-export function getCurrentCompanyId(): string | null { return getAuthenticatedUser()?.companyId ?? null; }
-export function isAdmin(): boolean { return getCurrentRole() === "ADMIN"; }
-export function isCompanyUser(): boolean { return getCurrentRole() === "COMPANY_USER"; }
+export function getCurrentRole(): UserRole | null {
+  return getAuthenticatedUser()?.role ?? null;
+}
 
+export function getCurrentCompanyId(): string | null {
+  return getAuthenticatedUser()?.companyId ?? null;
+}
+
+export function isAdmin(): boolean {
+  return getCurrentRole() === "ADMIN";
+}
+
+export function isCompanyUser(): boolean {
+  return getCurrentRole() === "COMPANY_USER";
+}
+
+// Remove all session-related browser data during logout.
 export function logout(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(TOKEN_KEY);
