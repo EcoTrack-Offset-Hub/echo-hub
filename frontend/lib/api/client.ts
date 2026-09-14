@@ -1,3 +1,4 @@
+// Standard response envelope returned by the Express backend.
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -6,6 +7,7 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
+// Typed error that preserves the HTTP status and backend field errors.
 export class ApiError extends Error {
   status: number;
   details?: Record<string, string>;
@@ -28,7 +30,7 @@ export async function apiClient<T>(
   options: RequestInit = {},
   useLocalRoute = false
 ): Promise<T> {
-  // Normalize base URL: if external API configured, prefix endpoint; otherwise use relative /api
+  // Choose either the configured Express API or a local Next.js route handler.
   const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
 
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
@@ -50,6 +52,7 @@ export async function apiClient<T>(
     headers.set("Content-Type", "application/json");
   }
   headers.set("Accept", "application/json");
+  // Browser requests carry the login token saved after successful authentication.
   if (typeof window !== "undefined") {
     const token = window.localStorage.getItem("ecotrack_auth_token");
     if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -67,6 +70,7 @@ export async function apiClient<T>(
       jsonResponse = await response.json();
     }
 
+    // Convert non-success HTTP responses into one consistent frontend error type.
     if (!response.ok) {
       let errorMsg =
         (jsonResponse && typeof jsonResponse === "object" && "error" in jsonResponse && jsonResponse.error) ||
@@ -94,7 +98,7 @@ export async function apiClient<T>(
       throw new ApiError(String(errorMsg), response.status, details);
     }
 
-    // If response wrapped in standard ApiResponse envelope, unpack data
+    // Unwrap the backend's standard { success, data } response envelope.
     if (jsonResponse && typeof jsonResponse === "object" && "success" in jsonResponse) {
       const envelope = jsonResponse as ApiResponse<T>;
       if (!envelope.success) {
