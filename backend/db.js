@@ -1,5 +1,7 @@
+// PostgreSQL data-access layer. All backend database queries stay in this file.
 let pgPool = null;
 
+// Enforce verified TLS for the Supabase PostgreSQL connection.
 function secureSupabaseConnectionString(databaseUrl) {
   const caPath = process.env.SUPABASE_SSL_ROOT_CERT_PATH;
   if (!caPath) {
@@ -16,6 +18,7 @@ function secureSupabaseConnectionString(databaseUrl) {
   return connectionString;
 }
 
+// Create one reusable connection pool rather than reconnecting for each request.
 async function getDb() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required. The backend does not fall back to in-memory or embedded storage.");
@@ -33,6 +36,7 @@ async function getDb() {
   };
 }
 
+// Fail fast if the required SQL migration was not applied.
 async function initDb() {
   const db = await getDb();
   const { rows } = await db.query("SELECT to_regclass('public.companies') AS companies, to_regclass('public.users') AS users, to_regclass('public.emissions') AS emissions");
@@ -41,6 +45,7 @@ async function initDb() {
   }
 }
 
+// Return emissions records with safe, parameterized optional filters.
 async function getAllEmissions(filters = {}) {
   const db = await getDb();
   let queryText = `
@@ -103,6 +108,7 @@ async function getAllEmissions(filters = {}) {
   }));
 }
 
+// Save both display fields and calculation-audit fields for one emissions record.
 async function insertEmissionRecord(record, calculation = null) {
   const db = await getDb();
   const queryText = `
@@ -139,18 +145,21 @@ async function insertEmissionRecord(record, calculation = null) {
   return rows[0];
 }
 
+// Authentication lookup: returns a user and stored password hash by email.
 async function findUserByEmail(email) {
   const db = await getDb();
   const { rows } = await db.query('SELECT id, email, password_hash as "passwordHash", role, company_id as "companyId" FROM users WHERE email = $1', [email]);
   return rows[0] || null;
 }
 
+// Confirm the requested company exists before company-scoped actions.
 async function companyExists(id) {
   const db = await getDb();
   const { rows } = await db.query("SELECT id FROM companies WHERE id = $1", [id]);
   return Boolean(rows[0]);
 }
 
+// Aggregate records into the category totals shown on the reports page.
 async function getEmissionsReport(companyId, period) {
   const db = await getDb();
   const conditions = ["company_id = $1"];
@@ -173,6 +182,7 @@ async function getEmissionsReport(companyId, period) {
   return { totalCo2e: Number(total.toFixed(3)), recordCount: countRows[0]?.count || 0, breakdown: rows.map((row) => ({ category: row.category, co2e: Number(Number(row.co2e).toFixed(3)) })) };
 }
 
+// Translate the selected dashboard label into current and comparison date ranges.
 function dashboardPeriod(period) {
   const current = new Date();
   const currentMonth = current.toISOString().slice(0, 7);
@@ -185,6 +195,7 @@ function dashboardPeriod(period) {
   return { label: "Current Period", from, to: null, previousFrom, previousTo: from, year: Number(currentMonth.slice(0, 4)), month: Number(currentMonth.slice(5, 7)) };
 }
 
+// Build the real dashboard KPI, category, and scope aggregates.
 async function getDashboardData(companyId, period) {
   const db = await getDb();
   const range = dashboardPeriod(period);
@@ -213,6 +224,7 @@ async function getDashboardData(companyId, period) {
   };
 }
 
+// Add or update local demo users without duplicating existing database rows.
 async function seedUsers(users) {
   const db = await getDb();
   await db.query("INSERT INTO companies (id, name) VALUES ('company-a', 'Company A'), ('company-b', 'Company B') ON CONFLICT (id) DO NOTHING");
