@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary: #2E7D32;
+    --primary-hover: #1B5E20;
+    --primary-foreground: #FFFFFF;
+    --primary-light: #E8F5E9;
+    --primary-border: #C8E6C9;
+    
+    --background: #F8FAF8;
+    --surface: #FFFFFF;
+    --foreground: #172117;
+    --foreground-heading: #111827;
+    --muted: #5F6B61;
+    --muted-light: #879188;
+    --muted-foreground: #6B7280;
+    
+    --border: #E2E8E3;
+    --border-light: #F3F4F6;
+    
+    --success: #2E7D32;
+    --success-bg: #E8F5E9;
+    --success-border: #A7F3D0;
+    
+    --warning: #D97706;
+    --warning-bg: #FEF3C7;
+    --warning-border: #FDE68A;
+    
+    --danger: #DC2626;
+    --danger-bg: #FEE2E2;
+    --danger-border: #FECACA;
+    
+    --info: #0284C7;
+    --info-bg: #E0F2FE;
+    --info-border: #BAE6FD;
+    
+    --scope-1: #16A34A;
+    --scope-2: #0284C7;
+    --scope-3: #10B981;
+  }
+}
+
+@theme {
+  --color-primary: #2E7D32;
+  --color-primary-hover: #1B5E20;
+  --color-primary-foreground: #FFFFFF;
+  --color-primary-light: #E8F5E9;
+  --color-primary-border: #C8E6C9;
+  
+  --color-background: #F8FAF8;
+  --color-surface: #FFFFFF;
+  --color-foreground: #172117;
+  --color-foreground-heading: #111827;
+  --color-muted: #5F6B61;
+  --color-muted-light: #879188;
+  --color-muted-foreground: #6B7280;
+  
+  --color-border: #E2E8E3;
+  --color-border-light: #F3F4F6;
+  
+  --color-success: #2E7D32;
+  --color-success-bg: #E8F5E9;
+  --color-success-border: #A7F3D0;
+  
+  --color-warning: #D97706;
+  --color-warning-bg: #FEF3C7;
+  --color-warning-border: #FDE68A;
+  
+  --color-danger: #DC2626;
+  --color-danger-bg: #FEE2E2;
+  --color-danger-border: #FECACA;
+  
+  --color-info: #0284C7;
+  --color-info-bg: #E0F2FE;
+  --color-info-border: #BAE6FD;
+  
+  --color-scope1: #16A34A;
+  --color-scope2: #0284C7;
+  --color-scope3: #10B981;
+}
+
+/* Accessible focus styling WCAG 2.1 AA */
+*:focus-visible {
+  outline: 2px solid #2E7D32;
+  outline-offset: 2px;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
