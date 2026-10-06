@@ -15,6 +15,7 @@ import {
   HelpCircle,
   LogOut,
   X,
+  Building2,
 } from "lucide-react";
 import { authService } from "@/lib/api/auth";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
@@ -30,11 +31,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, selectedCompanyId } = useAuthSession();
+  const { user, selectedCompanyId, companies } = useAuthSession();
+  const activeCompanyName =
+    companies.find((c) => c.id === selectedCompanyId)?.name ||
+    (selectedCompanyId === "company-b" ? "Company B" : "Company A");
 
   const navItems = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Emissions", href: "/emissions", icon: CloudSun },
+    ...(user.role === "ADMIN" ? [{ label: "Companies", href: "/companies", icon: Building2 }] : []),
     { label: "Offset Marketplace", href: "/marketplace", icon: Coins },
     { label: "Transactions", href: "/transactions", icon: Wallet },
     { label: "Reports", href: "/reports", icon: FileText },
@@ -116,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="overflow-hidden">
               <p className="text-xs font-semibold text-[#111827] truncate">{user.role === "ADMIN" ? "Administrator" : user.email}</p>
-              <p className="text-[10px] text-[#6B7280] truncate">{user.role === "ADMIN" ? "Admin" : selectedCompanyId === "company-b" ? "Company B" : "Company A"}</p>
+              <p className="text-[10px] text-[#6B7280] truncate">{user.role === "ADMIN" ? "Admin" : activeCompanyName}</p>
             </div>
           </div>
           <button

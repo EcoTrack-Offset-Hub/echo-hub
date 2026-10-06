@@ -6,38 +6,41 @@ import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { TransactionTable } from "./_components/TransactionTable";
 import { CertificateModal } from "./_components/CertificateModal";
-import { ScopeDonutChart } from "@/components/charts/ScopeDonutChart";
 import { transactionsApi } from "@/lib/api/transactions";
+import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
+import { clientCache } from "@/lib/cache/clientCache";
 import { TransactionRecord } from "@/types";
 import {
   Download,
-  Plus,
   ShieldCheck,
   Search,
-  Calendar,
-  Layers,
   Filter,
   RotateCcw,
-  Leaf,
-  Coins,
   DollarSign,
   Award,
-  ChevronRight,
-  TrendingUp,
-  FileCheck,
   CreditCard,
 } from "lucide-react";
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user, selectedCompanyId, companies } = useAuthSession();
+  const effectiveCompanyId = user.role === "ADMIN" ? selectedCompanyId : user.companyId || selectedCompanyId;
+  const activeCompanyName =
+    companies.find((c) => c.id === effectiveCompanyId)?.name ||
+    (effectiveCompanyId === "company-b" ? "Company B" : "Company A");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All Statuses");
   const [selectedProject, setSelectedProject] = useState("All Projects");
   const [selectedCertificateTxn, setSelectedCertificateTxn] = useState<TransactionRecord | null>(null);
   const [isCertModalOpen, setIsCertModalOpen] = useState(false);
+
+  const cacheKey = `transactions:${effectiveCompanyId}:${selectedStatus}:${selectedProject}:${searchQuery}`;
+
+  const [transactions, setTransactions] = useState<TransactionRecord[]>(() => {
+    return clientCache.get<TransactionRecord[]>(cacheKey) ?? [];
+  });
+  const [loading, setLoading] = useState<boolean>(() => !clientCache.has(cacheKey));
+  const [error, setError] = useState<string | null>(null);
 
   const loadTransactions = useCallback(async () => {
     setLoading(true);
@@ -47,20 +50,50 @@ export default function TransactionsPage() {
         status: selectedStatus,
         project: selectedProject,
         search: searchQuery,
+        companyId: user.role === "ADMIN" ? selectedCompanyId : undefined,
       });
-      setTransactions(data);
+      setTransactions(data || []);
+      clientCache.set(cacheKey, data || []);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unable to load audit transaction records.";
       setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [selectedStatus, selectedProject, searchQuery]);
+  }, [cacheKey, selectedStatus, selectedProject, searchQuery, user.role, selectedCompanyId]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void loadTransactions(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadTransactions]);
+    let ignore = false;
+    async function execute() {
+      try {
+        const data = await transactionsApi.getTransactions({
+          status: selectedStatus,
+          project: selectedProject,
+          search: searchQuery,
+          companyId: user.role === "ADMIN" ? selectedCompanyId : undefined,
+        });
+        if (!ignore) {
+          setTransactions(data || []);
+          clientCache.set(cacheKey, data || []);
+          setError(null);
+        }
+      } catch (err: unknown) {
+        if (!ignore && !clientCache.has(cacheKey)) {
+          const msg = err instanceof Error ? err.message : "Unable to load audit transaction records.";
+          setError(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void execute();
+    return () => {
+      ignore = true;
+    };
+  }, [cacheKey, selectedStatus, selectedProject, searchQuery, user.role, selectedCompanyId]);
 
   const handleOpenCertificate = (txn: TransactionRecord) => {
     setSelectedCertificateTxn(txn);
@@ -73,11 +106,64 @@ export default function TransactionsPage() {
     setSelectedProject("All Projects");
   };
 
+  const handleExportCSV = () => {
+    if (transactions.length === 0) {
+      alert("No transactions available to export.");
+      return;
+    }
+
+    const headers = [
+      "Transaction ID",
+      "Date",
+      "Project",
+      "Project Type",
+      "Credits (tCO2e)",
+      "Price per Tonne ($)",
+      "Total Amount ($)",
+      "Status",
+      "Certificate ID",
+      "Verification Standard",
+    ];
+
+    const escapeCSV = (value: unknown): string => {
+      if (value === null || value === undefined) return '""';
+      const str = String(value).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = transactions.map((t) =>
+      [
+        escapeCSV(t.transactionId),
+        escapeCSV(t.date),
+        escapeCSV(t.project),
+        escapeCSV(t.projectType),
+        escapeCSV(t.creditsTCO2e),
+        escapeCSV(t.pricePerTonne),
+        escapeCSV(t.totalAmount),
+        escapeCSV(t.status),
+        escapeCSV(t.certificateId || "N/A"),
+        escapeCSV(t.verificationStandard || "N/A"),
+      ].join(",")
+    );
+
+    const csvContent = [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `ecotrack-transactions-${effectiveCompanyId || "ledger"}-${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Compute live summary statistics based on current records
   const totalSpend = transactions.reduce((acc, t) => acc + t.totalAmount, 0);
   const totalCreditsRetired = transactions.reduce((acc, t) => acc + t.creditsTCO2e, 0);
-
-  const isExternalBackendConfigured = !!process.env.NEXT_PUBLIC_API_BASE_URL;
 
   return (
     <div className="flex-1 flex flex-col min-h-screen">
@@ -87,33 +173,6 @@ export default function TransactionsPage() {
       />
 
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
-        {/* Environment Transparency Banner */}
-        <div
-          className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
-            isExternalBackendConfigured
-              ? "bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]"
-              : "bg-[#FFFBEB] border-[#FDE68A] text-[#92400E]"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 flex-shrink-0" />
-            <span>
-              {isExternalBackendConfigured ? (
-                <>
-                  <strong>LIVE BACKEND:</strong> Transactions ledger connected to{" "}
-                  <code className="font-mono bg-white/70 px-1 py-0.5 rounded">
-                    {process.env.NEXT_PUBLIC_API_BASE_URL}
-                  </code>
-                </>
-              ) : (
-                <>
-                  <strong>DEMO / SEED DATA MODE:</strong> Reconciled using local prototype ledger.
-                  Not connected to PostgreSQL.
-                </>
-              )}
-            </span>
-          </div>
-        </div>
 
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -131,7 +190,7 @@ export default function TransactionsPage() {
               variant="outline"
               size="md"
               leftIcon={<Download className="w-4 h-4 text-[#2E7D32]" />}
-              onClick={() => alert("Exporting transactions ledger to CSV / XLSX...")}
+              onClick={handleExportCSV}
               className="shadow-xs"
             >
               Export
@@ -141,10 +200,9 @@ export default function TransactionsPage() {
               <Button
                 variant="primary"
                 size="md"
-                leftIcon={<Plus className="w-4 h-4" />}
                 className="shadow-xs"
               >
-                + New Transaction
+                New Transaction
               </Button>
             </Link>
           </div>
@@ -275,6 +333,7 @@ export default function TransactionsPage() {
         isOpen={isCertModalOpen}
         onClose={() => setIsCertModalOpen(false)}
         transaction={selectedCertificateTxn}
+        companyName={activeCompanyName}
       />
     </div>
   );

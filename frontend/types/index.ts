@@ -17,8 +17,17 @@ export interface AuthSession {
 }
 
 export interface Company {
-  id: "company-a" | "company-b";
-  name: "Company A" | "Company B";
+  id: string;
+  name: string;
+  status?: "Active" | "Inactive";
+  createdAt?: string;
+  userEmail?: string;
+}
+
+export interface RegisterCompanyInput {
+  name: string;
+  email: string;
+  password: string;
 }
 
 export interface ReportBreakdown {
@@ -60,6 +69,14 @@ export interface EmissionRecord {
   conversionFactor?: number;
   inputUnit?: string;
   isNew?: boolean;
+  companyId?: string;
+  rawInput?: string;
+  formula?: string;
+  resultKg?: number;
+  resultTonnes?: number;
+  methodology?: string;
+  reportingPeriod?: string;
+  createdAt?: string;
 }
 
 // Form values sent to the backend calculation and save endpoints.
@@ -70,6 +87,7 @@ export interface EmissionCalculationInput {
   unit: string;
   reportingPeriod: string;
   facility: string;
+  activity?: string;
 }
 
 // Transparent calculation details returned by the backend.
@@ -168,3 +186,4 @@ export interface OrganizationContext {
   role: string;
   tier: string;
 }
+

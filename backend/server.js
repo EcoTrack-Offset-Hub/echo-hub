@@ -14,9 +14,24 @@ const {
   getEmissionsReport,
   getDashboardData,
   seedUsers,
+  getAllCompanies,
+  findCompanyByName,
+  createCompanyWithUser,
+  findCompanyById,
+  updateCompany,
+  resetCompanyUserPassword,
+  setCompanyStatus,
+  getEmissionById,
+  updateEmissionRecord,
+  deleteEmissionRecord,
+  getAllProjects,
+  getProjectById,
+  purchaseCredits,
+  getTransactions,
+  getCompanyPortfolio,
 } = require("./db");
 const { calculateEmissions } = require("./calculationEngine");
-const { hashPassword, verifyPassword, signToken, requireAuth } = require("./auth");
+const { hashPassword, verifyPassword, signToken, requireAuth, requireAdmin } = require("./auth");
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -128,6 +143,16 @@ app.post("/api/auth/login", async (req, res, next) => {
       return res.status(401).json({ success: false, error: "Invalid email or password." });
     }
 
+    if (user.role === "COMPANY_USER" && user.companyId) {
+      const company = await findCompanyById(user.companyId);
+      if (company && company.status === "Inactive") {
+        return res.status(403).json({
+          success: false,
+          error: "This company account has been deactivated. Please contact an administrator.",
+        });
+      }
+    }
+
     return res.json({ success: true, data: { user: publicUser(user), token: signToken(user) } });
   } catch (error) {
     return next(error);
@@ -164,10 +189,17 @@ app.get("/api/emissions", requireAuth, async (req, res, next) => {
 // Calculate and save a new emissions record for an authorized company.
 app.post("/api/emissions", requireAuth, async (req, res, next) => {
   try {
+    if (req.user.role === "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Admins are not permitted to add emissions data.",
+      });
+    }
+
     const companyId = resolveCompany(req, res);
     if (companyId === undefined) return;
     if (!companyId) {
-      return res.status(400).json({ success: false, error: "Admins must select a companyId when creating an emission." });
+      return res.status(400).json({ success: false, error: "CompanyId is required when creating an emission." });
     }
     if (!(await companyExists(companyId))) {
       return res.status(404).json({ success: false, error: "Company not found." });
@@ -188,6 +220,81 @@ app.post("/api/emissions", requireAuth, async (req, res, next) => {
       success: true,
       message: "Emission record saved successfully.",
       data: { record, calculation },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Update an existing emissions record for the authorized company (Company User only).
+app.put("/api/emissions/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role === "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Admins are not permitted to edit emissions data.",
+      });
+    }
+
+    const existing = await getEmissionById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: "Emissions record not found." });
+    }
+
+    if (existing.companyId !== req.user.companyId) {
+      return res.status(403).json({
+        success: false,
+        error: "You are not authorized to modify another company's emissions.",
+      });
+    }
+
+    const input = req.body?.input !== undefined
+      ? { ...req.body, consumption: Number(String(req.body.input).replace(/,/g, "")) }
+      : req.body;
+    const errors = validateInput(input || {});
+    if (Object.keys(errors).length) {
+      return res.status(400).json({ success: false, error: "Validation error.", details: errors });
+    }
+
+    const calculation = calculateEmissions(input);
+    const updatedRecord = await updateEmissionRecord(req.params.id, req.user.companyId, calculation);
+
+    return res.json({
+      success: true,
+      message: "Emission record updated successfully.",
+      data: { record: updatedRecord, calculation },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Permanently delete an emissions record for the authorized company (Company User only).
+app.delete("/api/emissions/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role === "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Admins are not permitted to delete emissions data.",
+      });
+    }
+
+    const existing = await getEmissionById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: "Emissions record not found." });
+    }
+
+    if (existing.companyId !== req.user.companyId) {
+      return res.status(403).json({
+        success: false,
+        error: "You are not authorized to delete another company's emissions.",
+      });
+    }
+
+    await deleteEmissionRecord(req.params.id, req.user.companyId);
+    return res.json({
+      success: true,
+      message: "Emissions record deleted successfully.",
     });
   } catch (error) {
     return next(error);
@@ -249,13 +356,306 @@ app.get("/api/dashboard", requireAuth, async (req, res, next) => {
       return res.status(404).json({ success: false, error: "Company not found." });
     }
 
-    const period = typeof req.query.period === "string" ? req.query.period : "Current Period";
-    const supportedPeriods = ["Current Period", "Q2 2026", "Q1 2026", "Full Year 2025"];
-    if (!supportedPeriods.includes(period)) {
-      return res.status(400).json({ success: false, error: "Unsupported dashboard period." });
+    const period = typeof req.query.period === "string" ? req.query.period.trim() : "Current Period";
+    const range = typeof req.query.range === "string" ? req.query.range.trim().toUpperCase() : "6M";
+
+    return res.json({ success: true, data: await getDashboardData(companyId, period, range) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Return list of all registered companies (Admin-only).
+app.get("/api/companies", requireAuth, requireAdmin, async (_req, res, next) => {
+  try {
+    const companies = await getAllCompanies();
+    return res.json({ success: true, data: companies });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Register a new company and its initial company user (Admin-only).
+app.post("/api/companies", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const name = String(req.body?.name || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+
+    const errors = {};
+    if (!name || name.length < 2) {
+      errors.name = "Company name must be at least 2 characters.";
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = "A valid corporate email is required.";
+    }
+    if (!password || password.length < 6) {
+      errors.password = "Password must be at least 6 characters.";
     }
 
-    return res.json({ success: true, data: await getDashboardData(companyId, period) });
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ success: false, error: "Validation error.", details: errors });
+    }
+
+    const existingCompany = await findCompanyByName(name);
+    if (existingCompany) {
+      return res.status(409).json({ success: false, error: "A company with this name already exists." });
+    }
+
+    const existingUser = await findUserByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({ success: false, error: "A user with this email already exists." });
+    }
+
+    const passwordHash = hashPassword(password);
+    const result = await createCompanyWithUser({ name, email, passwordHash });
+
+    return res.status(201).json({
+      success: true,
+      message: "Company and user account created successfully.",
+      data: {
+        company: result.company,
+        user: publicUser(result.user),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Update company name and/or primary user login email (Admin-only).
+app.put("/api/companies/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const companyId = req.params.id;
+    const name = req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
+    const email = req.body?.email !== undefined ? String(req.body.email).trim().toLowerCase() : undefined;
+
+    const errors = {};
+    if (name !== undefined && (!name || name.length < 2)) {
+      errors.name = "Company name must be at least 2 characters.";
+    }
+    if (email !== undefined && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      errors.email = "A valid corporate email is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ success: false, error: "Validation error.", details: errors });
+    }
+
+    const company = await findCompanyById(companyId);
+    if (!company) {
+      return res.status(404).json({ success: false, error: "Company not found." });
+    }
+
+    const result = await updateCompany({ companyId, name, email });
+    return res.json({
+      success: true,
+      message: "Company account updated successfully.",
+      data: {
+        id: result.company.id,
+        name: result.company.name,
+        status: result.company.status,
+        userEmail: result.user?.email,
+      },
+    });
+  } catch (error) {
+    if (error.code === "DUPLICATE_EMAIL") {
+      return res.status(409).json({ success: false, error: "This email is already registered." });
+    }
+    if (error.code === "DUPLICATE_NAME") {
+      return res.status(409).json({ success: false, error: "A company with this name already exists." });
+    }
+    return next(error);
+  }
+});
+
+// Reset company primary user password (Admin-only).
+app.post("/api/companies/:id/reset-password", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const companyId = req.params.id;
+    const { newPassword, confirmPassword } = req.body || {};
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: "New password must be at least 6 characters.",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        error: "New password and confirmation do not match.",
+      });
+    }
+
+    const company = await findCompanyById(companyId);
+    if (!company) {
+      return res.status(404).json({ success: false, error: "Company not found." });
+    }
+
+    const passwordHash = hashPassword(newPassword);
+    await resetCompanyUserPassword({ companyId, passwordHash });
+
+    return res.json({
+      success: true,
+      message: "Password reset successfully.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Activate or deactivate a company account (Admin-only).
+app.post("/api/companies/:id/status", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const companyId = req.params.id;
+    const status = String(req.body?.status || "").trim();
+
+    if (status !== "Active" && status !== "Inactive") {
+      return res.status(400).json({
+        success: false,
+        error: "Status must be either 'Active' or 'Inactive'.",
+      });
+    }
+
+    const company = await findCompanyById(companyId);
+    if (!company) {
+      return res.status(404).json({ success: false, error: "Company not found." });
+    }
+
+    const updated = await setCompanyStatus({ companyId, status });
+    return res.json({
+      success: true,
+      message: status === "Active" ? "Company reactivated successfully." : "Company deactivated successfully.",
+      data: {
+        id: updated.id,
+        name: updated.name,
+        status: updated.status,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ==========================================
+// OFFSET MARKETPLACE & TRANSACTIONS API
+// ==========================================
+
+// Return offset projects catalog with optional filters and computed stats.
+app.get(["/api/marketplace", "/api/marketplace/projects"], async (req, res, next) => {
+  try {
+    const category = typeof req.query.category === "string" ? req.query.category : undefined;
+    const standard = typeof req.query.standard === "string" ? req.query.standard : undefined;
+    const search = typeof req.query.search === "string" ? req.query.search : undefined;
+
+    const data = await getAllProjects({ category, standard, search });
+    return res.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Return single offset project details by ID.
+app.get("/api/marketplace/projects/:id", async (req, res, next) => {
+  try {
+    const project = await getProjectById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ success: false, error: "Project not found." });
+    }
+    return res.json({ success: true, data: project });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Atomic credit retirement and purchase.
+// STRICT RBAC: Admins are FORBIDDEN from purchasing credits.
+app.post("/api/marketplace/purchase", requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role === "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Admins are not permitted to purchase carbon credits.",
+      });
+    }
+
+    const { projectId, quantityTCO2e } = req.body || {};
+    if (!projectId) {
+      return res.status(400).json({ success: false, error: "Project ID is required." });
+    }
+
+    const qty = Number(quantityTCO2e);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(422).json({
+        success: false,
+        error: "Requested quantity must be a positive number.",
+      });
+    }
+
+    const result = await purchaseCredits({
+      companyId: req.user.companyId,
+      projectId,
+      quantityTCO2e: qty,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Carbon credits retired and transaction registered.",
+      data: result,
+    });
+  } catch (error) {
+    // If quantity exceeds available or validation error, return 422
+    if (error.message && (error.message.includes("exceeds available") || error.message.includes("Project not found") || error.message.includes("positive number"))) {
+      return res.status(422).json({ success: false, error: error.message });
+    }
+    return next(error);
+  }
+});
+
+// Return transaction ledger.
+// COMPANY_USER: strictly their own company transactions.
+// ADMIN: selected company transactions or all if no company selected.
+app.get("/api/transactions", requireAuth, async (req, res, next) => {
+  try {
+    const companyId = resolveCompany(req, res);
+    if (companyId === undefined) return;
+
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const project = typeof req.query.project === "string" ? req.query.project : undefined;
+    const search = typeof req.query.search === "string" ? req.query.search : undefined;
+
+    const transactions = await getTransactions(companyId, { status, project, search });
+    return res.json({
+      success: true,
+      data: {
+        transactions,
+        total: transactions.length,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Return aggregated offset portfolio for a company.
+app.get("/api/marketplace/portfolio", requireAuth, async (req, res, next) => {
+  try {
+    const companyId = resolveCompany(req, res);
+    if (companyId === undefined) return;
+    if (!companyId) {
+      return res.status(400).json({ success: false, error: "Admins must select a companyId for portfolio view." });
+    }
+
+    const portfolio = await getCompanyPortfolio(companyId);
+    return res.json({
+      success: true,
+      data: portfolio,
+    });
   } catch (error) {
     return next(error);
   }

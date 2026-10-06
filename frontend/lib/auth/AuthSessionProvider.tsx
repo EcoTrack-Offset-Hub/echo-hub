@@ -1,26 +1,27 @@
 "use client";
 
 // Client-side session context for authenticated dashboard pages.
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { AuthenticatedUser } from "@/types";
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { AuthenticatedUser, Company } from "@/types";
 import { getAuthenticatedUser, getAuthToken, logout as clearSession } from "./session";
+import { companiesApi } from "@/lib/api/companies";
 
-type CompanyId = "company-a" | "company-b";
+const DEFAULT_COMPANIES: Company[] = [
+  { id: "company-a", name: "Company A" },
+  { id: "company-b", name: "Company B" },
+];
 
 interface AuthContextValue {
   user: AuthenticatedUser;
-  selectedCompanyId: CompanyId;
-  setSelectedCompanyId: (id: CompanyId) => void;
+  selectedCompanyId: string;
+  setSelectedCompanyId: (id: string) => void;
+  companies: Company[];
+  refreshCompanies: () => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const companyKey = "ecotrack_selected_company_id";
-
-// Only these two demo companies can be selected in the current interface.
-function isCompanyId(value: string | null): value is CompanyId {
-  return value === "company-a" || value === "company-b";
-}
 
 // Loads the saved browser session and makes it available to dashboard components.
 export function AuthSessionProvider({
@@ -31,7 +32,19 @@ export function AuthSessionProvider({
   onInvalidSession: () => void;
 }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [selectedCompanyId, setSelectedCompany] = useState<CompanyId>("company-a");
+  const [selectedCompanyId, setSelectedCompany] = useState<string>("company-a");
+  const [companies, setCompanies] = useState<Company[]>(DEFAULT_COMPANIES);
+
+  const refreshCompanies = useCallback(async () => {
+    try {
+      const data = await companiesApi.getCompanies();
+      if (Array.isArray(data) && data.length > 0) {
+        setCompanies(data);
+      }
+    } catch {
+      // Fallback to default companies if unable to fetch
+    }
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -45,15 +58,17 @@ export function AuthSessionProvider({
       const savedCompanyId = window.localStorage.getItem(companyKey);
       const companyId =
         authenticatedUser.role === "COMPANY_USER"
-          ? (authenticatedUser.companyId as CompanyId)
-          : isCompanyId(savedCompanyId)
-            ? savedCompanyId
-            : "company-a";
+          ? (authenticatedUser.companyId || "company-a")
+          : savedCompanyId || "company-a";
       setSelectedCompany(companyId);
+
+      if (authenticatedUser.role === "ADMIN") {
+        void refreshCompanies();
+      }
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [onInvalidSession]);
+  }, [onInvalidSession, refreshCompanies]);
 
   // Admins can switch company context; company users stay locked to their own company.
   const value = useMemo<AuthContextValue | null>(() => {
@@ -62,15 +77,17 @@ export function AuthSessionProvider({
     return {
       user,
       selectedCompanyId,
-      setSelectedCompanyId: (id) => {
-        if (user.role === "ADMIN" && isCompanyId(id)) {
+      setSelectedCompanyId: (id: string) => {
+        if (user.role === "ADMIN" && id && typeof id === "string") {
           window.localStorage.setItem(companyKey, id);
           setSelectedCompany(id);
         }
       },
+      companies,
+      refreshCompanies,
       logout: clearSession,
     };
-  }, [user, selectedCompanyId]);
+  }, [user, selectedCompanyId, companies, refreshCompanies]);
 
   return value ? <AuthContext.Provider value={value}>{children}</AuthContext.Provider> : null;
 }

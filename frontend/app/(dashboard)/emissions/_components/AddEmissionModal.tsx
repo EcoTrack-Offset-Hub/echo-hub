@@ -9,11 +9,21 @@ import { EmissionCategory, ScopeType } from "@/types";
 import { validateEmissionInput } from "@/lib/validation/calculationEngine";
 import { CheckCircle2, Calculator, AlertCircle } from "lucide-react";
 
-interface AddEmissionModalProps {
+export interface AddEmissionModalProps {
   isOpen: boolean;
   onClose: () => void;
   isCalculating?: boolean;
   serverError?: string | null;
+  initialData?: {
+    id?: string;
+    category?: EmissionCategory;
+    consumption?: number | string;
+    unit?: string;
+    reportingPeriod?: string;
+    facility?: string;
+    activity?: string;
+  } | null;
+  mode?: "add" | "edit";
   onProceedToReview: (data: {
     category: EmissionCategory;
     scope: ScopeType;
@@ -21,6 +31,7 @@ interface AddEmissionModalProps {
     unit: string;
     reportingPeriod: string;
     facility: string;
+    activity?: string;
   }) => void;
 }
 
@@ -29,13 +40,23 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
   onClose,
   isCalculating = false,
   serverError = null,
+  initialData = null,
+  mode = "add",
   onProceedToReview,
 }) => {
-  const [category, setCategory] = useState<EmissionCategory>("Purchased Electricity");
-  const [consumptionStr, setConsumptionStr] = useState("1000.00");
-  const [unit, setUnit] = useState("kWh");
-  const [reportingPeriod, setReportingPeriod] = useState("August 2026");
-  const [facility, setFacility] = useState("Headquarters Building A");
+  const [category, setCategory] = useState<EmissionCategory>(
+    initialData?.category || "Purchased Electricity"
+  );
+  const [consumptionStr, setConsumptionStr] = useState<string>(
+    initialData?.consumption !== undefined ? String(initialData.consumption) : "1000.00"
+  );
+  const [unit, setUnit] = useState<string>(initialData?.unit || "kWh");
+  const [reportingPeriod, setReportingPeriod] = useState<string>(
+    initialData?.reportingPeriod || "August 2026"
+  );
+  const [facility, setFacility] = useState<string>(
+    initialData?.facility || "Headquarters Building A"
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Auto-map scope by category
@@ -54,7 +75,7 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
   const handleCategoryChange = (val: string) => {
     const cat = val as EmissionCategory;
     setCategory(cat);
-    // Auto-update default unit
+    // Auto-update default unit if adding or if unit matches old category default
     if (cat === "Purchased Electricity") setUnit("kWh");
     else if (cat === "Fleet & Fuel") setUnit("L");
     else if (cat === "Business Travel") setUnit("passenger-km");
@@ -86,6 +107,7 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
       unit,
       reportingPeriod,
       facility,
+      activity: initialData?.activity,
     });
   };
 
@@ -93,8 +115,12 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add Emissions Data"
-      subtitle="Log corporate activity data for GHG Protocol carbon conversion"
+      title={mode === "edit" ? "Edit Emissions Data" : "Add Emissions Data"}
+      subtitle={
+        mode === "edit"
+          ? "Update activity inputs for authoritative backend recalculation"
+          : "Log corporate activity data for GHG Protocol carbon conversion"
+      }
       maxWidth="lg"
     >
       <form onSubmit={handleCalculate} className="space-y-4" noValidate>
@@ -207,10 +233,11 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
             disabled={isCalculating}
             leftIcon={<Calculator className="w-4 h-4" />}
           >
-            {isCalculating ? "Calculating..." : "Calculate & Review"}
+            {isCalculating ? "Calculating..." : mode === "edit" ? "Recalculate & Review" : "Calculate & Review"}
           </Button>
         </div>
       </form>
     </Modal>
   );
 };
+

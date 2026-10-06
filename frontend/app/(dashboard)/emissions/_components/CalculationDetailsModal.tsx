@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/Button";
 import { CalculationResult } from "@/types";
 import { ArrowLeft, Check, ShieldCheck, HelpCircle } from "lucide-react";
 
-interface CalculationDetailsModalProps {
+export interface CalculationDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onBack: () => void;
-  onSave: () => Promise<void>;
+  onBack?: () => void;
+  onSave?: () => Promise<void>;
   calculation: CalculationResult | null;
+  readOnly?: boolean;
 }
 
 export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = ({
@@ -20,12 +21,14 @@ export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = (
   onBack,
   onSave,
   calculation,
+  readOnly = false,
 }) => {
   const [isSaving, setIsSaving] = useState(false);
 
   if (!calculation) return null;
 
   const handleSave = async () => {
+    if (!onSave) return;
     setIsSaving(true);
     try {
       await onSave();
@@ -112,26 +115,40 @@ export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = (
 
         {/* Action buttons */}
         <div className="flex items-center justify-between pt-3 border-t border-[#E2E8E3]">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onBack}
-            disabled={isSaving}
-            leftIcon={<ArrowLeft className="w-4 h-4" />}
-          >
-            Back to Edit
-          </Button>
+          {readOnly || !onSave ? (
+            <div className="w-full flex justify-end">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          ) : (
+            <>
+              {onBack && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={onBack}
+                  disabled={isSaving}
+                  leftIcon={<ArrowLeft className="w-4 h-4" />}
+                >
+                  Back to Edit
+                </Button>
+              )}
 
-          <Button
-            type="button"
-            variant="primary"
-            isLoading={isSaving}
-            disabled={isSaving}
-            onClick={handleSave}
-            leftIcon={<Check className="w-4 h-4" />}
-          >
-            {isSaving ? "Saving..." : "Save Data"}
-          </Button>
+              <div className="ml-auto">
+                <Button
+                  type="button"
+                  variant="primary"
+                  isLoading={isSaving}
+                  disabled={isSaving}
+                  onClick={handleSave}
+                  leftIcon={<Check className="w-4 h-4" />}
+                >
+                  {isSaving ? "Saving..." : "Save Data"}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </Modal>

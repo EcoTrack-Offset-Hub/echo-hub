@@ -43,4 +43,12 @@ function requireAuth(req, res, next) {
     next();
   } catch (error) { next(error); }
 }
-module.exports = { hashPassword, verifyPassword, signToken, requireAuth };
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return res.status(403).json({ success: false, error: "Forbidden: Admin access required." });
+  }
+  next();
+}
+
+module.exports = { hashPassword, verifyPassword, signToken, requireAuth, requireAdmin };

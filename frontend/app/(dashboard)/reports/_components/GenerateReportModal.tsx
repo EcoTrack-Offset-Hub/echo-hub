@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { ReportRecord } from "@/types";
-import { FileText, Download } from "lucide-react";
+import { FileText } from "lucide-react";
 
 interface GenerateReportModalProps {
   isOpen: boolean;
@@ -18,8 +18,6 @@ interface GenerateReportModalProps {
 export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   isOpen,
   onClose,
-  onCreated,
-  onReportGenerated,
 }) => {
   const [name, setName] = useState("Corporate Sustainability Audit Report");
   const [type, setType] = useState<"Sustainability" | "Emissions" | "Offsets" | "Compliance">("Sustainability");

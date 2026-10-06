@@ -1,15 +1,154 @@
 import { apiClient } from "./client";
 
-export interface DashboardKPI { label: string; value: string; unit: string; trend: string; trendDirection: "up" | "down"; comparison: string; icon: string; color: string; }
-export interface DashboardSummaryData { period: string; bannerNotice: string; kpis: DashboardKPI[]; trendSeries: Array<{ month: string; emissions: number }>; scopeBreakdown: Array<{ scope: string; percentage: number; amount: number; color: string }>; reductionProgress: { percentage: number; target: string; currentProgress: string; }; offsetStatus?: { totalCreditsPurchased: string; totalRetired: string; portfolioDiversityScore: string; netEmissions: string; }; recordCount: number; }
-interface DashboardResponse { company: { id: string; name: string }; summary: { totalEmissionsTonnes: number; previousPeriodEmissionsTonnes: number | null; changePercent: number | null; recordCount: number }; byCategory: Array<{ category: string; emissionsTonnes: number; percentage: number }>; byScope: Array<{ scope: string; emissionsTonnes: number; percentage: number }>; period: { year: number; month: number | null; label: string }; }
-const scopeColors = ["#2E7D32", "#0284C7", "#9333EA"];
-function toDashboardSummary(data: DashboardResponse): DashboardSummaryData {
-  const change = data.summary.changePercent;
-  const total = data.summary.totalEmissionsTonnes;
-  return { period: data.period.label, recordCount: data.summary.recordCount, bannerNotice: change === null ? "Real-time emissions data is ready for review." : `Emissions are ${Math.abs(change).toFixed(1)}% ${change <= 0 ? "lower" : "higher"} than the previous period.`, kpis: [
-    { label: "Total Carbon Footprint", value: total.toLocaleString(), unit: "tCO₂e", trend: change === null ? "No previous-period comparison" : `${Math.abs(change).toFixed(1)}% vs previous period`, trendDirection: change !== null && change > 0 ? "up" : "down", comparison: `${data.summary.recordCount} verified records`, icon: "leaf", color: "green" },
-    ...data.byScope.map((item, index) => ({ label: item.scope, value: item.emissionsTonnes.toLocaleString(), unit: "tCO₂e", trend: `${item.percentage.toFixed(1)}% of total`, trendDirection: "down" as const, comparison: "Current selected period", icon: ["cloud", "bolt", "truck"][index] || "leaf", color: "green" })),
-  ], trendSeries: data.byCategory.map((item) => ({ month: item.category, emissions: item.emissionsTonnes })), scopeBreakdown: data.byScope.map((item, index) => ({ scope: item.scope, percentage: item.percentage, amount: item.emissionsTonnes, color: scopeColors[index] || "#6B7280" })), reductionProgress: { percentage: change !== null && change < 0 ? Math.abs(change) : 0, target: "Target: Track verified reductions", currentProgress: change === null ? "No previous-period data" : `${Math.abs(change).toFixed(1)}% ${change <= 0 ? "reduction" : "increase"}` }, offsetStatus: { totalCreditsPurchased: "Not connected", totalRetired: "Not connected", portfolioDiversityScore: "—", netEmissions: `${total.toLocaleString()} tCO₂e` } };
+export interface AvailablePeriod {
+  key: string;
+  label: string;
+  displayRange: string;
 }
-export const dashboardApi = { async getSummary(period: string, companyId?: string): Promise<DashboardSummaryData> { const params = new URLSearchParams({ period }); if (companyId) params.set("companyId", companyId); const data = await apiClient<DashboardResponse>(`/api/dashboard?${params.toString()}`); return toDashboardSummary(data); } };
+
+export interface EmissionsData {
+  current: number;
+  previous: number | null;
+  percentageChange: number | null;
+  recordCount: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  periodLabel: string;
+  displayRange: string;
+  bannerNotice: string | null;
+}
+
+export interface ScopeItem {
+  emissions: number;
+  percentage: number;
+}
+
+export interface ScopesData {
+  scope1: ScopeItem;
+  scope2: ScopeItem;
+  scope3: ScopeItem;
+  dominantScope: string;
+}
+
+export interface IncompleteReason {
+  id: string;
+  missing: string[];
+}
+
+export interface DataCompletenessData {
+  totalRecords: number;
+  completeRecords: number;
+  incompleteRecords: number;
+  completenessPercentage: number;
+  isComplete: boolean;
+  message: string;
+  reasons: IncompleteReason[];
+}
+
+export interface TrendPoint {
+  period: string;
+  month: string;
+  shortMonth: string;
+  emissions: number;
+}
+
+export interface TrendMetaData {
+  range: string;
+  hasEnoughData: boolean;
+  emptyMessage: string;
+  series: TrendPoint[];
+}
+
+export interface TopSourceItem {
+  rank: number;
+  category: string;
+  emissions: number;
+  percentage: number;
+}
+
+export interface PrimaryCalculation {
+  category: string;
+  input: string;
+  unit: string;
+  factor: number;
+  factorUnit: string;
+  formula: string;
+  resultKg: number;
+  resultTonnes: number;
+  methodology: string;
+  standard: string;
+}
+
+export interface CalculationSummaryData {
+  recordCount: number;
+  totalEmissions: number;
+  summaryText: string;
+  primaryCalculation: PrimaryCalculation | null;
+}
+
+export interface OffsetsData {
+  grossEmissions: number;
+  creditsPurchased: number;
+  creditsRetired: number;
+  netEmissions: number;
+  hasPurchases: boolean;
+  purchasedLabel: string;
+  purchasedSubtext: string;
+  retiredLabel: string;
+  retiredSubtext: string;
+  netLabel: string;
+  netSubtext: string;
+  footerNotice: string;
+}
+
+export interface CompanyDashboardData {
+  company: {
+    id: string;
+    name: string;
+  };
+  period: {
+    key: string;
+    label: string;
+    displayRange: string;
+    year: number;
+    month: number | null;
+    start: string | null;
+    end: string | null;
+  };
+  availablePeriods: AvailablePeriod[];
+  emissions: EmissionsData;
+  scopes: ScopesData;
+  dataCompleteness: DataCompletenessData;
+  trend: TrendPoint[];
+  trendMeta?: TrendMetaData;
+  topSources: TopSourceItem[];
+  calculationSummary: CalculationSummaryData;
+  offsets: OffsetsData;
+  // Backward compatibility fields
+  summary?: {
+    totalEmissionsTonnes: number;
+    previousPeriodEmissionsTonnes: number | null;
+    changePercent: number | null;
+    recordCount: number;
+  };
+}
+
+export const dashboardApi = {
+  async getDashboard(
+    period: string = "Current Period",
+    range: string = "6M",
+    companyId?: string
+  ): Promise<CompanyDashboardData> {
+    const params = new URLSearchParams();
+    if (period) params.set("period", period);
+    if (range) params.set("range", range);
+    if (companyId) params.set("companyId", companyId);
+
+    return apiClient<CompanyDashboardData>(`/api/dashboard?${params.toString()}`);
+  },
+
+  // Backward compatibility method
+  async getSummary(period: string = "Current Period", companyId?: string): Promise<CompanyDashboardData> {
+    return this.getDashboard(period, "6M", companyId);
+  },
+};

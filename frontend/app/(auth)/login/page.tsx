@@ -199,13 +199,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Demo Auth Transparency Banner */}
-          <div className="p-3 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E] text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>
-              <strong>DEMO AUTHENTICATION:</strong> Local development mode. Production single sign-on / PostgreSQL auth will be provided by backend.
-            </span>
-          </div>
 
           {/* Error Banner */}
           {errorMessage && (
