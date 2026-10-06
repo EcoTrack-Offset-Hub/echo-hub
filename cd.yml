@@ -1,0 +1,66 @@
+name: EcoTrack CD
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deliver:
+    name: Build & Package Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # -------------------------
+      # Frontend
+      # -------------------------
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # -------------------------
+      # Backend
+      # -------------------------
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate backend
+        working-directory: backend
+        run: |
+          node --check server.js
+          node --check auth.js
+          node --check db.js
+          node --check calculationEngine.js
+
+      # -------------------------
+      # Package deployment artifact
+      # -------------------------
+      - name: Create deployment package
+        run: |
+          mkdir -p deployment
+          cp -r frontend deployment/frontend
+          cp -r backend deployment/backend
+          cp package.json deployment/package.json
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotrack-production-${{ github.sha }}
+          path: deployment/
+          retention-days: 7
