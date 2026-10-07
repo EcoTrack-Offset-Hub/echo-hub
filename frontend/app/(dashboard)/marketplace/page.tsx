@@ -25,7 +25,6 @@ import {
   AlertCircle,
   Inbox,
   RefreshCw,
-  Database,
 } from "lucide-react";
 
 export default function MarketplacePage() {
@@ -42,8 +41,6 @@ export default function MarketplacePage() {
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<PurchaseOrder | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
-
-  const isExternalBackendConfigured = !!process.env.NEXT_PUBLIC_API_BASE_URL;
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -118,33 +115,6 @@ export default function MarketplacePage() {
       />
 
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
-        {/* Environment Transparency Banner */}
-        <div
-          className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
-            isExternalBackendConfigured
-              ? "bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]"
-              : "bg-[#FFFBEB] border-[#FDE68A] text-[#92400E]"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 flex-shrink-0" />
-            <span>
-              {isExternalBackendConfigured ? (
-                <>
-                  <strong>LIVE BACKEND:</strong> Marketplace inventory connected to{" "}
-                  <code className="font-mono bg-white/70 px-1 py-0.5 rounded">
-                    {process.env.NEXT_PUBLIC_API_BASE_URL}
-                  </code>
-                </>
-              ) : (
-                <>
-                  <strong>DEMO / SEED DATA MODE:</strong> Project catalog served from local prototype
-                  store. Not connected to PostgreSQL.
-                </>
-              )}
-            </span>
-          </div>
-        </div>
 
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

@@ -45,6 +45,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           src={project.imageUrl}
           alt={project.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          onError={(event) => {
+            event.currentTarget.onerror = null;
+            event.currentTarget.src =
+              "https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=800&auto=format&fit=crop&q=80";
+          }}
         />
 
         {/* Verification Standard Badge */}

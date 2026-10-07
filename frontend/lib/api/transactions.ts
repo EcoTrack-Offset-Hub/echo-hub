@@ -9,20 +9,22 @@ export interface TransactionsResponseData {
 export const transactionsApi = {
   /**
    * GET /api/transactions
-   * Retrieves transaction ledger
+   * Retrieves transaction ledger from the authoritative Express + PostgreSQL backend.
    */
   async getTransactions(filters?: {
     status?: string;
     project?: string;
     search?: string;
+    companyId?: string;
   }): Promise<TransactionRecord[]> {
     const params = new URLSearchParams();
     if (filters?.status && filters.status !== "All Statuses") params.set("status", filters.status);
     if (filters?.project && filters.project !== "All Projects") params.set("project", filters.project);
     if (filters?.search) params.set("search", filters.search);
+    if (filters?.companyId) params.set("companyId", filters.companyId);
 
     const query = params.toString() ? `?${params.toString()}` : "";
-    const res = await apiClient<TransactionsResponseData>(`/api/transactions${query}`, {}, true);
+    const res = await apiClient<TransactionsResponseData>(`/api/transactions${query}`);
     return res.transactions;
   },
 };

@@ -18,10 +18,24 @@ export interface PurchaseResult {
   updatedProject: MarketplaceProject;
 }
 
+export interface PortfolioBreakdownItem {
+  projectType: string;
+  credits: number;
+  amount: number;
+}
+
+export interface PortfolioData {
+  totalCreditsRetired: number;
+  totalInvested: number;
+  transactionCount: number;
+  projectsSupportedCount: number;
+  breakdown: PortfolioBreakdownItem[];
+}
+
 export const marketplaceApi = {
   /**
    * GET /api/marketplace
-   * Retrieves offset projects catalog
+   * Retrieves offset projects catalog from Express + PostgreSQL backend
    */
   async getProjects(filters?: {
     category?: string;
@@ -34,25 +48,35 @@ export const marketplaceApi = {
     if (filters?.search) params.set("search", filters.search);
 
     const query = params.toString() ? `?${params.toString()}` : "";
-    const res = await apiClient<MarketplaceResponseData>(`/api/marketplace${query}`, {}, true);
+    const res = await apiClient<MarketplaceResponseData>(`/api/marketplace${query}`);
     return res.projects;
   },
 
   /**
    * POST /api/marketplace/purchase
-   * Retires credits and validates inventory on the server
+   * Retires credits and validates inventory on Express + PostgreSQL backend
    */
   async purchaseCredits(projectId: string, quantityTCO2e: number): Promise<PurchaseOrder> {
     const res = await apiClient<PurchaseResult>("/api/marketplace/purchase", {
       method: "POST",
       body: JSON.stringify({ projectId, quantityTCO2e }),
-    }, true);
+    });
     return res.order;
+  },
+
+  /**
+   * GET /api/marketplace/portfolio
+   * Aggregates total offsets, spent capital, and allocations from Express backend
+   */
+  async getPortfolio(companyId?: string): Promise<PortfolioData> {
+    const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    const res = await apiClient<PortfolioData>(`/api/marketplace/portfolio${query}`);
+    return res;
   },
 
   async toggleSave(projectId: string): Promise<boolean> {
     // Client-side visual toggle helper
-    return true;
+    return Boolean(projectId);
   },
 };
 

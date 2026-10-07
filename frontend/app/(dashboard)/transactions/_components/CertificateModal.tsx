@@ -10,12 +10,14 @@ interface CertificateModalProps {
   isOpen: boolean;
   onClose: () => void;
   transaction: TransactionRecord | null;
+  companyName?: string;
 }
 
 export const CertificateModal: React.FC<CertificateModalProps> = ({
   isOpen,
   onClose,
   transaction,
+  companyName,
 }) => {
   if (!transaction) return null;
 
@@ -54,7 +56,9 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           {/* Statement */}
           <div className="text-center py-2 space-y-1">
             <p className="text-xs text-[#5F6B61]">This document certifies that</p>
-            <h3 className="text-lg font-extrabold text-[#111827]">Company A</h3>
+            <h3 className="text-lg font-extrabold text-[#111827]">
+              {companyName || "Certified Entity"}
+            </h3>
             <p className="text-xs text-[#5F6B61]">has permanently retired</p>
             <p className="text-2xl font-black text-[#2E7D32]">
               {transaction.creditsTCO2e.toLocaleString()} tCO₂e
@@ -89,6 +93,16 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
               </span>
             </div>
           </div>
+
+          {/* Security stamp */}
+          <div className="pt-2 flex items-center justify-between text-[11px] text-[#5F6B61]">
+            <span className="flex items-center gap-1 font-mono text-[10px]">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D32]" /> Cryptographically Sealed
+            </span>
+            <span className="text-[10px] text-[#9CA3AF]">
+              Status: <strong className="text-[#166534]">{transaction.status}</strong>
+            </span>
+          </div>
         </div>
 
         {/* Action Controls */}
@@ -97,29 +111,27 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
             <a
               href={transaction.registryUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="text-xs font-semibold text-[#2E7D32] hover:underline flex items-center gap-1"
             >
-              <span>View on Public Registry</span>
               <ExternalLink className="w-3.5 h-3.5" />
+              View on Public Registry
             </a>
           ) : (
-            <span className="text-xs text-[#6B7280] flex items-center gap-1">
-              <ShieldCheck className="w-4 h-4 text-[#2E7D32]" />
-              Cryptographically verified
-            </span>
+            <span />
           )}
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" size="sm" onClick={onClose}>
               Close
             </Button>
             <Button
               variant="primary"
-              onClick={() => alert(`Certificate ${transaction.certificateId} downloaded.`)}
+              size="sm"
               leftIcon={<Download className="w-4 h-4" />}
+              onClick={() => alert(`Certificate ${transaction.certificateId} downloaded.`)}
             >
-              Download PDF
+              Download PDF Certificate
             </Button>
           </div>
         </div>

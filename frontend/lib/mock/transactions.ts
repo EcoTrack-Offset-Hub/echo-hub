@@ -35,7 +35,7 @@ export const mockTransactions: TransactionRecord[] = [
     transactionId: "TXN-001247",
     project: "Solar Energy Transition",
     projectType: "Renewable Energy",
-    projectImage: "https://images.unsplash.com/photo-1509391365360-2e959784a276?w=200&auto=format&fit=crop&q=80",
+    projectImage: "https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=200&auto=format&fit=crop&q=80",
     creditsTCO2e: 25000,
     pricePerTonne: 11.8,
     totalAmount: 295000,

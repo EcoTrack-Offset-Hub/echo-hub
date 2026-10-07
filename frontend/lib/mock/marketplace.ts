@@ -45,7 +45,7 @@ export const marketplaceProjects: MarketplaceProject[] = [
     pricePerTonne: 11.8,
     availableTCO2e: 124000,
     badge: "Gold Standard",
-    imageUrl: "https://images.unsplash.com/photo-1509391365360-2e959784a276?w=800&auto=format&fit=crop&q=80",
+    imageUrl: "https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=800&auto=format&fit=crop&q=80",
     isSaved: true,
   },
   {

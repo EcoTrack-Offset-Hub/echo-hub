@@ -5,6 +5,8 @@
   "description": "EcoTrack Hub Enterprise Sustainability & Carbon Management Platform",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "frontend": "npm --prefix frontend run dev",
+    "backend": "npm --prefix backend run dev",
     "build": "npm --prefix frontend run build",
     "start": "npm --prefix frontend start",
     "lint": "npm --prefix frontend run lint"

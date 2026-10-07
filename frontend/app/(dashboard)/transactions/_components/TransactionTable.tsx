@@ -108,6 +108,11 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                         src={txn.projectImage}
                         alt={txn.project}
                         className="w-7 h-7 rounded-lg object-cover flex-shrink-0"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src =
+                            "https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=200&auto=format&fit=crop&q=80";
+                        }}
                       />
                       <span className="truncate">{txn.project}</span>
                     </div>

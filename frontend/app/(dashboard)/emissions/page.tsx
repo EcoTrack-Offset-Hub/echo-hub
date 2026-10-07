@@ -11,12 +11,11 @@ import { EmissionTable } from "./_components/EmissionTable";
 import { emissionsApi } from "@/lib/api/emissions";
 import { CalculationResult, EmissionCalculationInput, EmissionRecord } from "@/types";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
+import { clientCache } from "@/lib/cache/clientCache";
 import {
-  Plus,
   RotateCcw,
   Calendar,
   Layers,
-  Grid,
   MapPin,
   Cloud,
   Flame,
@@ -25,7 +24,6 @@ import {
   ShieldCheck,
   TrendingDown,
   CheckCircle2,
-  Database,
 } from "lucide-react";
 
 function parseTCO2e(emissionStr: string): number {
@@ -41,9 +39,6 @@ function parseTCO2e(emissionStr: string): number {
 
 export default function EmissionsPage() {
   const { user, selectedCompanyId } = useAuthSession();
-  const [records, setRecords] = useState<EmissionRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Filter States
   const [dateRange, setDateRange] = useState("Last 12 months");
@@ -51,46 +46,134 @@ export default function EmissionsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
 
-  // Modal Flow States (Primary Functional Slice)
+  const effectiveCompanyId = user.role === "ADMIN" ? selectedCompanyId : user.companyId || selectedCompanyId;
+  const cacheKey = `emissions:${effectiveCompanyId}:${selectedScope}:${selectedCategory}`;
+
+  const [records, setRecords] = useState<EmissionRecord[]>(() => {
+    return clientCache.get<EmissionRecord[]>(cacheKey) ?? [];
+  });
+  const [loading, setLoading] = useState<boolean>(() => !clientCache.has(cacheKey));
+  const [error, setError] = useState<string | null>(null);
+
+  // Modal Flow States
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [editingRecord, setEditingRecord] = useState<EmissionRecord | null>(null);
+
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationError, setCalculationError] = useState<string | null>(null);
   const [activeCalculation, setActiveCalculation] = useState<CalculationResult | null>(null);
+
+  // View Details Modal State (Read-only CalculationDetailsModal)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [viewCalculation, setViewCalculation] = useState<CalculationResult | null>(null);
+
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
-  const isExternalBackendConfigured = !!process.env.NEXT_PUBLIC_API_BASE_URL;
-
   const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
     try {
       const response = await emissionsApi.getEmissions({
         scope: selectedScope,
         category: selectedCategory,
         companyId: user.role === "ADMIN" ? selectedCompanyId : undefined,
       });
-      setRecords(response.records || []);
+      const recs = response.records || [];
+      setRecords(recs);
+      clientCache.set(cacheKey, recs);
+      setError(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unable to load emissions data. Please try again.";
-      setError(message);
+      if (!clientCache.has(cacheKey)) {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
-  }, [selectedScope, selectedCategory, selectedCompanyId, user.role]);
+  }, [cacheKey, selectedScope, selectedCategory, selectedCompanyId, user.role]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void loadData(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadData]);
+    let ignore = false;
+    async function execute() {
+      try {
+        const response = await emissionsApi.getEmissions({
+          scope: selectedScope,
+          category: selectedCategory,
+          companyId: user.role === "ADMIN" ? selectedCompanyId : undefined,
+        });
+        if (!ignore) {
+          const recs = response.records || [];
+          setRecords(recs);
+          clientCache.set(cacheKey, recs);
+          setError(null);
+        }
+      } catch (err: unknown) {
+        if (!ignore && !clientCache.has(cacheKey)) {
+          const message = err instanceof Error ? err.message : "Unable to load emissions data. Please try again.";
+          setError(message);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    void execute();
+    return () => {
+      ignore = true;
+    };
+  }, [cacheKey, selectedScope, selectedCategory, selectedCompanyId, user.role]);
 
   const handleResetFilters = () => {
     setDateRange("Last 12 months");
     setSelectedScope("All Scopes");
     setSelectedCategory("All Categories");
     setSelectedLocation("All Locations");
+  };
+
+  const handleOpenAdd = () => {
+    setModalMode("add");
+    setEditingRecord(null);
+    setCalculationError(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleEditRecord = (rec: EmissionRecord) => {
+    setModalMode("edit");
+    setEditingRecord(rec);
+    setCalculationError(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleViewRecord = (rec: EmissionRecord) => {
+    const calc: CalculationResult = {
+      activity: rec.activity,
+      scope: rec.scope,
+      category: rec.category,
+      input: rec.rawInput || rec.quantity.split(" ")[0] || "—",
+      unit: rec.inputUnit || rec.quantity.split(" ").slice(1).join(" ") || "",
+      conversionFactor: rec.conversionFactor || 0,
+      formula: rec.formula || `${rec.quantity} = ${rec.emissions}`,
+      resultKg: rec.resultKg || 0,
+      resultTonnes: rec.resultTonnes || 0,
+      methodology: rec.methodology || "GHG Protocol Corporate Standard",
+      reportingPeriod: rec.reportingPeriod || "—",
+      facility: rec.facility || "—",
+    };
+    setViewCalculation(calc);
+    setIsViewModalOpen(true);
+  };
+
+  const handleDeleteRecord = async (rec: EmissionRecord) => {
+    await emissionsApi.deleteRecord(rec.id);
+    setRecords((prev) => prev.filter((r) => r.id !== rec.id));
+    clientCache.invalidate("emissions");
+    clientCache.invalidate("dashboard");
+    clientCache.invalidate("reports");
+    setSuccessNotice("Emissions record deleted successfully.");
+    setTimeout(() => setSuccessNotice(null), 5000);
   };
 
   // Step 1 -> 2: Form -> Frontend validation -> POST /api/emissions/calculate (Backend calculation authority)
@@ -111,16 +194,35 @@ export default function EmissionsPage() {
     }
   };
 
-  // Step 2 -> 3: Review -> POST /api/emissions (Database persistence) -> Frontend updates -> New emission record displayed
+  // Step 2 -> 3: Review -> POST/PUT /api/emissions (Database persistence) -> Frontend updates
   const handleSaveCalculation = async () => {
     if (!activeCalculation) return;
     setErrorNotice(null);
     try {
-      const res = await emissionsApi.createRecord(activeCalculation, user.role === "ADMIN" ? selectedCompanyId : undefined);
-      setRecords((prev) => [res.record, ...prev]);
-      setIsReviewModalOpen(false);
-      setIsSuccessModalOpen(true);
-      setSuccessNotice("Saved successfully");
+      if (modalMode === "edit" && editingRecord) {
+        const res = await emissionsApi.updateRecord(editingRecord.id, activeCalculation);
+        setRecords((prev) =>
+          prev.map((r) => (r.id === editingRecord.id ? res.record : r))
+        );
+        clientCache.invalidate("emissions");
+        clientCache.invalidate("dashboard");
+        clientCache.invalidate("reports");
+        setIsReviewModalOpen(false);
+        setEditingRecord(null);
+        setSuccessNotice("Emissions record updated successfully.");
+      } else {
+        const res = await emissionsApi.createRecord(
+          activeCalculation,
+          user.role === "ADMIN" ? selectedCompanyId : undefined
+        );
+        setRecords((prev) => [res.record, ...prev]);
+        clientCache.invalidate("emissions");
+        clientCache.invalidate("dashboard");
+        clientCache.invalidate("reports");
+        setIsReviewModalOpen(false);
+        setIsSuccessModalOpen(true);
+        setSuccessNotice("Emissions record saved successfully.");
+      }
       setTimeout(() => setSuccessNotice(null), 5000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unable to save emissions data. Please try again.";
@@ -204,32 +306,6 @@ export default function EmissionsPage() {
       />
 
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
-        {/* Environment Transparency Banner */}
-        <div
-          className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
-            isExternalBackendConfigured
-              ? "bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]"
-              : "bg-[#FFFBEB] border-[#FDE68A] text-[#92400E]"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 flex-shrink-0" />
-            <span>
-              {isExternalBackendConfigured ? (
-                <>
-                  <strong>LIVE BACKEND:</strong> Emissions ledger connected to{" "}
-                  <code className="font-mono bg-white/70 px-1 py-0.5 rounded">
-                    {process.env.NEXT_PUBLIC_API_BASE_URL}
-                  </code>
-                </>
-              ) : (
-                <>
-                  <strong>POSTGRESQL CONNECTED:</strong> Real PostgreSQL ledger and authoritative GHG Protocol carbon engine active.
-                </>
-              )}
-            </span>
-          </div>
-        </div>
 
         {/* Error Alert Banner */}
         {errorNotice && (
@@ -282,18 +358,16 @@ export default function EmissionsPage() {
             </p>
           </div>
 
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => {
-              setCalculationError(null);
-              setIsAddModalOpen(true);
-            }}
-            leftIcon={<Plus className="w-4 h-4" />}
-            className="shadow-sm"
-          >
-            + Add Emissions Data
-          </Button>
+          {user?.role !== "ADMIN" && (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleOpenAdd}
+              className="shadow-sm"
+            >
+              Add Emissions Data
+            </Button>
+          )}
         </div>
 
         {/* Filter Controls Bar */}
@@ -333,7 +407,6 @@ export default function EmissionsPage() {
 
             {/* Category Filter */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E2E8E3] bg-[#F9FAFB]">
-              <Grid className="w-3.5 h-3.5 text-[#6B7280]" />
               <select
                 aria-label="Category filter"
                 value={selectedCategory}
@@ -343,6 +416,7 @@ export default function EmissionsPage() {
                 <option>All Categories</option>
                 <option>Purchased Electricity</option>
                 <option>Fleet & Fuel</option>
+                <option>Facilities</option>
                 <option>Business Travel</option>
                 <option>Purchased Goods</option>
                 <option>Logistics & Freight</option>
@@ -452,10 +526,10 @@ export default function EmissionsPage() {
           </div>
         </div>
 
-        {/* Middle Row: Emissions Over Time + Emissions by Category + Emissions by Scope */}
+        {/* Charts Row: Emissions Over Time (7 cols) + Emissions by Scope (5 cols) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Emissions Over Time Multi-line Chart (5 cols) */}
-          <div className="lg:col-span-5 bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
+          {/* Emissions Over Time Multi-line Chart (7 cols) */}
+          <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between pb-3 border-b border-[#F3F4F6]">
               <div>
                 <h3 className="text-sm font-bold text-[#111827]">Emissions Over Time</h3>
@@ -531,13 +605,64 @@ export default function EmissionsPage() {
             </div>
           </div>
 
-          {/* Emissions by Category Horizontal Progress Bars (4 cols) — Dynamically derived */}
+          {/* Emissions by Scope Donut (5 cols) — Dynamically derived */}
+          <div className="lg:col-span-5">
+            <ScopeDonutChart
+              total={totalEmissions > 0 ? totalEmissions.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0"}
+              unit="tCO₂e total"
+              title="Emissions by Scope"
+              segments={[
+                { scope: "Scope 1", percentage: scope1Pct, amount: `${scope1Total.toFixed(1)} tCO₂e`, color: "#16A34A" },
+                { scope: "Scope 2", percentage: scope2Pct, amount: `${scope2Total.toFixed(1)} tCO₂e`, color: "#0284C7" },
+                { scope: "Scope 3", percentage: scope3Pct, amount: `${scope3Total.toFixed(1)} tCO₂e`, color: "#10B981" },
+              ]}
+              className="h-full"
+            />
+          </div>
+        </div>
+
+        {/* Summary Row: Top Emission Sources (4 cols) + Emissions by Category (4 cols) + Data Quality (4 cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Top Emission Sources (4 cols) */}
+          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-[#111827] pb-3 border-b border-[#F3F4F6]">
+                Top Emission Sources
+              </h3>
+
+              <div className="divide-y divide-[#F3F4F6] text-xs pt-1">
+                {topSources.length > 0 ? (
+                  topSources.map((s) => (
+                    <div key={s.rank} className="py-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-bold text-[#9CA3AF] text-[11px]">{s.rank}</span>
+                        <div>
+                          <p className="font-semibold text-[#111827]">{s.name}</p>
+                          <p className="text-[10px] text-[#6B7280]">{s.scope}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-[#111827]">{s.emissions}</p>
+                        <p className="text-[10px] text-[#2E7D32] font-bold">{s.pct}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-xs text-[#6B7280]">
+                    No emission sources recorded.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Emissions by Category (4 cols) */}
           <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="pb-2 border-b border-[#F3F4F6]">
               <h3 className="text-sm font-bold text-[#111827]">Emissions by Category</h3>
             </div>
 
-            <div className="space-y-3 pt-3 text-xs">
+            <div className="space-y-3 pt-3 text-xs flex-1">
               {categoryBreakdown.length > 0 ? (
                 categoryBreakdown.map((c) => (
                   <div key={c.name} className="space-y-1">
@@ -558,67 +683,8 @@ export default function EmissionsPage() {
             </div>
           </div>
 
-          {/* Emissions by Scope Donut (3 cols) — Dynamically derived */}
-          <div className="lg:col-span-3">
-            <ScopeDonutChart
-              total={totalEmissions > 0 ? totalEmissions.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0"}
-              unit="tCO₂e total"
-              title="Emissions by Scope"
-              segments={[
-                { scope: "Scope 1", percentage: scope1Pct, amount: `${scope1Total.toFixed(1)} tCO₂e`, color: "#16A34A" },
-                { scope: "Scope 2", percentage: scope2Pct, amount: `${scope2Total.toFixed(1)} tCO₂e`, color: "#0284C7" },
-                { scope: "Scope 3", percentage: scope3Pct, amount: `${scope3Total.toFixed(1)} tCO₂e`, color: "#10B981" },
-              ]}
-              className="h-full"
-            />
-          </div>
-        </div>
-
-        {/* Bottom Section: Top Emission Sources + Recent Emissions Records + Data Quality */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Top Emission Sources (4 cols) — Dynamically derived from records */}
-          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs">
-            <h3 className="text-sm font-bold text-[#111827] pb-3 border-b border-[#F3F4F6]">
-              Top Emission Sources
-            </h3>
-
-            <div className="divide-y divide-[#F3F4F6] text-xs pt-1">
-              {topSources.length > 0 ? (
-                topSources.map((s) => (
-                  <div key={s.rank} className="py-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono font-bold text-[#9CA3AF] text-[11px]">{s.rank}</span>
-                      <div>
-                        <p className="font-semibold text-[#111827]">{s.name}</p>
-                        <p className="text-[10px] text-[#6B7280]">{s.scope}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-[#111827]">{s.emissions}</p>
-                      <p className="text-[10px] text-[#2E7D32] font-bold">{s.pct}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-8 text-center text-xs text-[#6B7280]">
-                  No emission sources recorded.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Records Table (5 cols) */}
-          <div className="lg:col-span-5">
-            <EmissionTable
-              records={filteredRecords}
-              isLoading={loading}
-              error={error}
-              onRetry={loadData}
-            />
-          </div>
-
-          {/* Data Quality Card (3 cols) */}
-          <div className="lg:col-span-3 bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
+          {/* Data Quality Card (4 cols) */}
+          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-[#2E7D32]" />
@@ -648,30 +714,62 @@ export default function EmissionsPage() {
                 />
               </div>
             </div>
-
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => alert("All verified records adhere to ISO 14064-1 standard.")}
-              className="w-full mt-4"
-            >
-              Review records
-            </Button>
+            <div className="pt-4 border-t border-[#F3F4F6] flex items-center justify-between text-xs text-[#6B7280]">
+              <span>GHG Protocol Tier 1 & 2 Standards</span>
+              <span className="text-[#2E7D32] font-semibold">Authoritative</span>
+            </div>
           </div>
+        </div>
+
+        {/* Full-width Recent Emissions Records Card (Placed BELOW summary cards) */}
+        <div className="w-full pt-1">
+          <EmissionTable
+            records={filteredRecords}
+            isLoading={loading}
+            error={error}
+            onRetry={loadData}
+            isAdmin={user.role === "ADMIN"}
+            onViewRecord={handleViewRecord}
+            onEditRecord={handleEditRecord}
+            onDeleteRecord={handleDeleteRecord}
+          />
         </div>
       </main>
 
-      {/* ========================================================================= */}
-      {/* PRIMARY FUNCTIONAL VERTICAL SLICE: 3-STEP CALCULATION & SAVING MODAL FLOW  */}
-      {/* ========================================================================= */}
+      {/* Add / Edit Emission Modal */}
       <AddEmissionModal
+        key={isAddModalOpen ? (editingRecord ? `edit-${editingRecord.id}` : "add-new") : "closed"}
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        mode={modalMode}
+        initialData={
+          editingRecord
+            ? {
+                id: editingRecord.id,
+                category: editingRecord.category,
+                consumption:
+                  editingRecord.rawInput ||
+                  parseFloat(editingRecord.quantity.replace(/,/g, "")) ||
+                  1000,
+                unit:
+                  editingRecord.inputUnit ||
+                  editingRecord.quantity.split(" ").slice(1).join(" ") ||
+                  "kWh",
+                reportingPeriod: editingRecord.reportingPeriod || "August 2026",
+                facility: editingRecord.facility || "Headquarters Building A",
+                activity: editingRecord.activity,
+              }
+            : null
+        }
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setEditingRecord(null);
+        }}
         isCalculating={isCalculating}
         serverError={calculationError}
         onProceedToReview={handleProceedToReview}
       />
 
+      {/* Review Calculation Modal (Step 2 of Add/Edit) */}
       <CalculationDetailsModal
         isOpen={isReviewModalOpen}
         onClose={() => setIsReviewModalOpen(false)}
@@ -683,6 +781,18 @@ export default function EmissionsPage() {
         calculation={activeCalculation}
       />
 
+      {/* View Calculation Details Modal (Read-only, from Table Actions) */}
+      <CalculationDetailsModal
+        isOpen={isViewModalOpen}
+        onClose={() => {
+          setIsViewModalOpen(false);
+          setViewCalculation(null);
+        }}
+        calculation={viewCalculation}
+        readOnly={true}
+      />
+
+      {/* Save Success Modal */}
       <SaveSuccessModal
         isOpen={isSuccessModalOpen}
         onClose={() => setIsSuccessModalOpen(false)}
@@ -691,3 +801,4 @@ export default function EmissionsPage() {
     </div>
   );
 }
+

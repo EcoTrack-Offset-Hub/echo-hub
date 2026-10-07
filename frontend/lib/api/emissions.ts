@@ -78,6 +78,30 @@ export const emissionsApi = {
   },
 
   /**
+   * PUT /api/emissions/:id
+   * Recalculates and updates an existing emission record in the database
+   */
+  async updateRecord(
+    id: string,
+    input: EmissionCalculationInput | CalculationResult
+  ): Promise<{ record: EmissionRecord; calculation: CalculationResult }> {
+    return apiClient<{ record: EmissionRecord; calculation: CalculationResult }>(`/api/emissions/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  },
+
+  /**
+   * DELETE /api/emissions/:id
+   * Deletes an emissions record permanently from the database
+   */
+  async deleteRecord(id: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/api/emissions/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  /**
    * Backward-compatible addRecord helper
    */
   async addRecord(calc: CalculationResult): Promise<EmissionRecord> {

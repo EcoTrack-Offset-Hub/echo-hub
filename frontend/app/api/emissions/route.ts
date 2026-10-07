@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { CalculationResult, EmissionRecord } from "@/types";
-import { initialEmissionsRecords, emissionsSummary } from "@/lib/mock/emissions";
 import { SERVER_EMISSION_FACTORS } from "./calculate/route";
 
 // Server-side database store (initialized empty to reflect real database state)
