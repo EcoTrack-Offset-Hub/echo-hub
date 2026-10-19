@@ -5,18 +5,17 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node tests/role-permissions.test.js && node tests/company-management.test.js && node tests/dashboard-metrics.test.js && node tests/marketplace-and-transactions.test.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
-    "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "express": "4.22.3",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.13.3",
-    "prisma": "^6.19.3"
+    "pg": "^8.13.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
