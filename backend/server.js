@@ -36,6 +36,21 @@ const { hashPassword, verifyPassword, signToken, requireAuth, requireAdmin } = r
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 
+// Permit local development plus the deployed frontend configured by the host.
+// FRONTEND_URL may contain one URL or a comma-separated allowlist.
+const allowedOrigins = new Set(
+  (process.env.FRONTEND_URL || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean)
+);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // Requests such as Render health checks have no Origin header.
+  const normalizedOrigin = origin.replace(/\/$/, "");
+  return /^http:\/\/localhost(?::\d+)?$/.test(normalizedOrigin) || allowedOrigins.has(normalizedOrigin);
+}
+
 // Valid units accepted for each emissions category.
 const VALID_UNITS = {
   "Purchased Electricity": ["kWh", "MWh"],
@@ -50,7 +65,10 @@ const VALID_UNITS = {
 // Allow the local Next.js application to call this API.
 app.use(
   cors({
-    origin: /^http:\/\/localhost(:\d+)?$/,
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) return callback(null, true);
+      return callback(new Error("Origin is not allowed by CORS."));
+    },
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
   })
