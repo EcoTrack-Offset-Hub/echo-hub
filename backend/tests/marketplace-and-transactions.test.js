@@ -1,10 +1,10 @@
 // Automated verification tests for Marketplace and Transactions persistence & RBAC
 const assert = require("assert");
 const http = require("http");
-require("dotenv").config({ path: require("path").join(__dirname, ".env") });
+require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 
-const { app } = require("./server");
-const { getDb } = require("./db");
+const { app } = require("../server");
+const { getDb } = require("../config/db");
 
 let server;
 let baseUrl;

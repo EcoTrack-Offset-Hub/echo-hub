@@ -1,7 +1,7 @@
-require("dotenv").config({ path: require("path").join(__dirname, ".env") });
+require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const http = require("http");
-const { app } = require("./server");
-const { initDb, getDb, findCompanyById } = require("./db");
+const { app } = require("../server");
+const { initDb, getDb, findCompanyById } = require("../config/db");
 
 async function request(serverUrl, path, options = {}) {
   const url = `${serverUrl}${path}`;
