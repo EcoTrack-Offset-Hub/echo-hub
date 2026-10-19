@@ -29,9 +29,9 @@ const {
   purchaseCredits,
   getTransactions,
   getCompanyPortfolio,
-} = require("./db");
-const { calculateEmissions } = require("./calculationEngine");
-const { hashPassword, verifyPassword, signToken, requireAuth, requireAdmin } = require("./auth");
+} = require("./config/db");
+const { calculateEmissions } = require("./services/calculationEngine");
+const { hashPassword, verifyPassword, signToken, requireAuth, requireAdmin } = require("./middleware/auth");
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);

@@ -475,7 +475,7 @@ async function getEmissionsReport(companyId, period) {
   return { totalCo2e: Number(total.toFixed(3)), recordCount: countRows[0]?.count || 0, breakdown: rows.map((row) => ({ category: row.category, co2e: Number(Number(row.co2e).toFixed(3)) })) };
 }
 
-const { SERVER_EMISSION_FACTORS } = require("./calculationEngine");
+const { SERVER_EMISSION_FACTORS } = require("../services/calculationEngine");
 
 // Translate the selected dashboard label into current and comparison date ranges.
 function dashboardPeriod(period) {

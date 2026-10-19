@@ -16,6 +16,8 @@ dist/
 .env.development
 *.pem
 *.key
+.env.*
+!.env.example
 
 # Logs
 npm-debug.log*
@@ -26,13 +28,7 @@ yarn-error.log*
 # OS metadata
 .DS_Store
 Thumbs.db
-@"
-.env
-.env.*
-!.env.example
 
+# Package-specific environment files
 backend/.env
 frontend/.env.local
-
-node_modules/
-"@ | Set-Content .gitignore
