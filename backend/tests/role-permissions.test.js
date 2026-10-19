@@ -1,8 +1,10 @@
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const http = require("http");
 const assert = require("assert");
-const { app, start } = require("../server");
-const { initDb, getDb } = require("../config/db");
+const crypto = require("crypto");
+const { app } = require("../server");
+const { initDb, getDb, seedUsers, getEmissionById } = require("../config/db");
+const { hashPassword } = require("../middleware/auth");
 
 async function request(serverUrl, path, options = {}) {
   const url = `${serverUrl}${path}`;
@@ -13,7 +15,7 @@ async function request(serverUrl, path, options = {}) {
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
       ...(options.headers || {}),
     },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: options.rawBody !== undefined ? options.rawBody : options.body ? JSON.stringify(options.body) : undefined,
   });
 
   let data;
@@ -29,6 +31,12 @@ async function request(serverUrl, path, options = {}) {
 async function runTests() {
   console.log("=== Starting EcoTrack Role-Based Access Control Verification Tests ===");
   await initDb();
+  const password = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
+  await seedUsers([
+    { id: "usr-admin-david", email: "admin@ecotrack.test", passwordHash: hashPassword(password), role: "ADMIN", companyId: null },
+    { id: "usr-company-a", email: "companya@ecotrack.test", passwordHash: hashPassword(password), role: "COMPANY_USER", companyId: "company-a" },
+    { id: "usr-company-b", email: "companyb@ecotrack.test", passwordHash: hashPassword(password), role: "COMPANY_USER", companyId: "company-b" },
+  ]);
 
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, resolve));
@@ -49,7 +57,6 @@ async function runTests() {
   let adminToken = null;
 
   try {
-    const password = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
 
     // Test A: Admin login works
     const adminLoginRes = await request(baseUrl, "/api/auth/login", {
@@ -165,7 +172,12 @@ async function runTests() {
     });
     const compBToken = compBLogin.data?.data?.token;
 
-    // Test H: Company A can add emissions to Company A
+    // Capture baseline dashboard metrics before adding emission
+    const dashBeforeAddRes = await request(baseUrl, "/api/dashboard", { token: compAToken });
+    const baseDashCurrent = Number(dashBeforeAddRes.data?.data?.emissions?.current || 0);
+    const baseDashCount = Number(dashBeforeAddRes.data?.data?.emissions?.recordCount || 0);
+
+    // Test H: Company A can add emissions to Company A and record persists in DB
     const compAAddEmisRes = await request(baseUrl, "/api/emissions", {
       method: "POST",
       token: compAToken,
@@ -178,11 +190,15 @@ async function runTests() {
       },
     });
     compAAddedEmissionId = compAAddEmisRes.data?.data?.record?.id;
+    const dbPersistedAfterCreate = compAAddedEmissionId ? await getEmissionById(compAAddedEmissionId) : null;
     recordResult(
       "H",
-      "Company A can add emissions to Company A",
-      compAAddEmisRes.status === 201 && compAAddEmisRes.data?.data?.record?.companyId === "company-a",
-      `Status: ${compAAddEmisRes.status}, Record ID: ${compAAddEmisRes.data?.data?.record?.id}`
+      "Company A can add emissions to Company A and record persists in PostgreSQL",
+      compAAddEmisRes.status === 201 &&
+        compAAddEmisRes.data?.data?.record?.companyId === "company-a" &&
+        dbPersistedAfterCreate?.id === compAAddedEmissionId &&
+        dbPersistedAfterCreate?.resultKg === 63,
+      `Status: ${compAAddEmisRes.status}, Record ID: ${compAAddedEmissionId}, Persisted kg: ${dbPersistedAfterCreate?.resultKg}`
     );
 
     // Test I: Company A cannot access Company B data (403)
@@ -245,21 +261,28 @@ async function runTests() {
       `GET /api/companies: ${compAGetCompanies.status}, POST /api/companies: ${compAPostCompanies.status}`
     );
 
-    // Test L: Saved emissions still appear correctly in Dashboard/Reports
+    // Test L: Saved emissions appear in Dashboard/Reports and increment dashboard totals accurately (+0.063 tCO2e)
     const compADashRes = await request(baseUrl, "/api/dashboard", { token: compAToken });
     const compARepRes = await request(baseUrl, "/api/reports", { token: compAToken });
     const compAEmisListRes = await request(baseUrl, "/api/emissions", { token: compAToken });
-    const hasRecords = (compAEmisListRes.data?.data?.records?.length || 0) > 0;
-    const dashHasCount = (compADashRes.data?.data?.summary?.recordCount || 0) > 0;
+    const hasRecords = (compAEmisListRes.data?.data?.records || []).some((r) => r.id === compAAddedEmissionId);
+    const dashCountAfterCreate = Number(compADashRes.data?.data?.emissions?.recordCount || 0);
+    const dashCurrentAfterCreate = Number(compADashRes.data?.data?.emissions?.current || 0);
+    const expectedCurrentAfterCreate = Number((baseDashCurrent + 0.063).toFixed(3));
     const repHasCo2e = (compARepRes.data?.data?.totalCo2e || 0) > 0;
     recordResult(
       "L",
-      "Saved emissions appear correctly in Dashboard/Reports",
-      compADashRes.status === 200 && compARepRes.status === 200 && hasRecords && dashHasCount && repHasCo2e,
-      `Emissions Count: ${compAEmisListRes.data?.data?.records?.length}, Dash Count: ${compADashRes.data?.data?.summary?.recordCount}, Rep CO2e: ${compARepRes.data?.data?.totalCo2e}`
+      "Saved emissions appear in Dashboard/Reports and increment dashboard totals",
+      compADashRes.status === 200 &&
+        compARepRes.status === 200 &&
+        hasRecords &&
+        dashCountAfterCreate === baseDashCount + 1 &&
+        dashCurrentAfterCreate === expectedCurrentAfterCreate &&
+        repHasCo2e,
+      `Dash Total: ${dashCurrentAfterCreate} (expected ${expectedCurrentAfterCreate}), Dash Count: ${dashCountAfterCreate}, Rep CO2e: ${compARepRes.data?.data?.totalCo2e}`
     );
 
-    // Test M: Company A can EDIT own emission and backend recalculates output
+    // Test M: Company A can EDIT own emission, DB persists update, and dashboard total updates (+0.21 tCO2e)
     const emissionIdToEdit = compAAddedEmissionId;
     const compAUpdateRes = await request(baseUrl, `/api/emissions/${emissionIdToEdit}`, {
       method: "PUT",
@@ -275,14 +298,20 @@ async function runTests() {
     // 500 kWh * 0.42 kg CO2e/kWh = 210 kg CO2e (0.21 tCO2e)
     const updatedRecord = compAUpdateRes.data?.data?.record;
     const updatedCalc = compAUpdateRes.data?.data?.calculation;
+    const dbPersistedAfterUpdate = await getEmissionById(emissionIdToEdit);
+    const dashAfterUpdateRes = await request(baseUrl, "/api/dashboard", { token: compAToken });
+    const dashCurrentAfterUpdate = Number(dashAfterUpdateRes.data?.data?.emissions?.current || 0);
+    const expectedCurrentAfterUpdate = Number((baseDashCurrent + 0.21).toFixed(3));
     recordResult(
       "M",
-      "Company A can EDIT own emission and backend recalculates output",
+      "Company A can EDIT own emission; DB persists and dashboard recalculates total",
       compAUpdateRes.status === 200 &&
         updatedRecord?.id === emissionIdToEdit &&
         updatedCalc?.resultKg === 210 &&
+        dbPersistedAfterUpdate?.resultKg === 210 &&
+        dashCurrentAfterUpdate === expectedCurrentAfterUpdate &&
         updatedRecord?.emissions.includes("210"),
-      `Status: ${compAUpdateRes.status}, Recalculated: ${updatedCalc?.resultKg} kg CO2e (${updatedRecord?.emissions})`
+      `Status: ${compAUpdateRes.status}, DB kg: ${dbPersistedAfterUpdate?.resultKg}, Dash Total: ${dashCurrentAfterUpdate} (expected ${expectedCurrentAfterUpdate})`
     );
 
     // Test N: Admin CANNOT edit emissions (PUT returns 403)
@@ -354,21 +383,139 @@ async function runTests() {
     });
     const checkDeletedRes = await request(baseUrl, "/api/emissions", { token: compAToken });
     const stillExists = (checkDeletedRes.data?.data?.records || []).some((r) => r.id === emissionIdToEdit);
+    const dbAfterDelete = await getEmissionById(emissionIdToEdit);
     compAAddedEmissionId = null; // Successfully deleted
     recordResult(
       "R",
-      "Company A can DELETE own emission and record is removed",
-      compADeleteRes.status === 200 && !stillExists,
+      "Company A can DELETE own emission and record is removed from PostgreSQL",
+      compADeleteRes.status === 200 && !stillExists && dbAfterDelete === null,
       `Status: ${compADeleteRes.status}, Deleted record present in DB: ${stillExists}`
     );
 
-    // Test S: Consistency: Dashboard/Reports reflect deleted emission
+    // Test S: Consistency: Dashboard/Reports reflect deleted emission and return to baseline
     const compADashAfterDelete = await request(baseUrl, "/api/dashboard", { token: compAToken });
+    const dashCountAfterDelete = Number(compADashAfterDelete.data?.data?.emissions?.recordCount || 0);
+    const dashCurrentAfterDelete = Number(compADashAfterDelete.data?.data?.emissions?.current || 0);
     recordResult(
       "S",
-      "Consistency: Dashboard reflects emissions deletion without inconsistency",
-      compADashAfterDelete.status === 200,
-      `Status: ${compADashAfterDelete.status}, Updated Record Count: ${compADashAfterDelete.data?.data?.summary?.recordCount}`
+      "Consistency: Dashboard reflects emissions deletion and restores baseline total",
+      compADashAfterDelete.status === 200 &&
+        dashCountAfterDelete === baseDashCount &&
+        dashCurrentAfterDelete === baseDashCurrent,
+      `Status: ${compADashAfterDelete.status}, Total: ${dashCurrentAfterDelete} (base ${baseDashCurrent}), Count: ${dashCountAfterDelete} (base ${baseDashCount})`
+    );
+
+    // Test T: Expired signed token is rejected with 401 Unauthorized
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expiredHead = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const expiredBody = Buffer.from(
+      JSON.stringify({
+        sub: "usr-company-a",
+        email: "companya@ecotrack.test",
+        role: "COMPANY_USER",
+        companyId: "company-a",
+        iat: nowSec - 7200,
+        exp: nowSec - 3600,
+      })
+    ).toString("base64url");
+    const expiredSig = crypto
+      .createHmac("sha256", process.env.AUTH_JWT_SECRET)
+      .update(`${expiredHead}.${expiredBody}`)
+      .digest("base64url");
+    const expiredToken = `${expiredHead}.${expiredBody}.${expiredSig}`;
+    const expiredDashRes = await request(baseUrl, "/api/dashboard", { token: expiredToken });
+    const expiredEmisRes = await request(baseUrl, "/api/emissions", { token: expiredToken });
+    recordResult(
+      "T",
+      "Expired signed token is rejected with 401 Unauthorized",
+      expiredDashRes.status === 401 && expiredEmisRes.status === 401,
+      `Dashboard: ${expiredDashRes.status}, Emissions: ${expiredEmisRes.status}`
+    );
+
+    // Test U: Invalid token signature and missing/malformed tokens are rejected with 401
+    const validPayloadBody = Buffer.from(
+      JSON.stringify({
+        sub: "usr-company-a",
+        email: "companya@ecotrack.test",
+        role: "COMPANY_USER",
+        companyId: "company-a",
+        iat: nowSec,
+        exp: nowSec + 3600,
+      })
+    ).toString("base64url");
+    const badSig = crypto
+      .createHmac("sha256", "wrong-signing-secret-that-is-at-least-32-chars")
+      .update(`${expiredHead}.${validPayloadBody}`)
+      .digest("base64url");
+    const invalidSigToken = `${expiredHead}.${validPayloadBody}.${badSig}`;
+    const badSigRes = await request(baseUrl, "/api/emissions", { token: invalidSigToken });
+    const malformedTokenRes = await request(baseUrl, "/api/emissions", { token: "malformed_token_without_dots" });
+    const noTokenRes = await request(baseUrl, "/api/emissions");
+    recordResult(
+      "U",
+      "Invalid token signature, malformed token, and missing token return 401",
+      badSigRes.status === 401 && malformedTokenRes.status === 401 && noTokenRes.status === 401,
+      `BadSig: ${badSigRes.status}, Malformed: ${malformedTokenRes.status}, NoToken: ${noTokenRes.status}`
+    );
+
+    // Test V: Missing and malformed request bodies & query parameter validation
+    const missingLoginBody = await request(baseUrl, "/api/auth/login", { method: "POST", body: { email: "" } });
+    const invalidCalcBody = await request(baseUrl, "/api/emissions/calculate", {
+      method: "POST",
+      token: compAToken,
+      body: { category: "InvalidCat", consumption: -10, unit: "badUnit", facility: "", reportingPeriod: "" },
+    });
+    const invalidPostEmisBody = await request(baseUrl, "/api/emissions", {
+      method: "POST",
+      token: compAToken,
+      body: { category: "Purchased Electricity", consumption: 0, unit: "L", facility: "", reportingPeriod: "" },
+    });
+    const unknownEmisPut = await request(baseUrl, "/api/emissions/rec-nonexistent-999", {
+      method: "PUT",
+      token: compAToken,
+      body: {
+        category: "Purchased Electricity",
+        consumption: 100,
+        unit: "kWh",
+        facility: "Facility",
+        reportingPeriod: "Current Period",
+      },
+    });
+    const unknownEmisDelete = await request(baseUrl, "/api/emissions/rec-nonexistent-999", {
+      method: "DELETE",
+      token: compAToken,
+    });
+    const badReportQuery = await request(baseUrl, "/api/reports?month=2026-10&year=2026", { token: compAToken });
+    const missingAdminCompanyDash = await request(baseUrl, "/api/dashboard", { token: adminToken });
+    const unknownAdminCompanyDash = await request(baseUrl, "/api/dashboard?companyId=company-unknown-999", { token: adminToken });
+    const malformedJsonRes = await request(baseUrl, "/api/auth/login", {
+      method: "POST",
+      rawBody: "{ malformed json",
+    });
+    recordResult(
+      "V",
+      "Missing/malformed request bodies and invalid parameters return 400/404",
+      missingLoginBody.status === 400 &&
+        invalidCalcBody.status === 400 &&
+        invalidPostEmisBody.status === 400 &&
+        unknownEmisPut.status === 404 &&
+        unknownEmisDelete.status === 404 &&
+        badReportQuery.status === 400 &&
+        missingAdminCompanyDash.status === 400 &&
+        unknownAdminCompanyDash.status === 404 &&
+        (malformedJsonRes.status === 400 || malformedJsonRes.status === 500),
+      `Login:${missingLoginBody.status}, Calc:${invalidCalcBody.status}, PostEmis:${invalidPostEmisBody.status}, Put404:${unknownEmisPut.status}, Del404:${unknownEmisDelete.status}, RepQuery:${badReportQuery.status}, AdminDash400:${missingAdminCompanyDash.status}, AdminDash404:${unknownAdminCompanyDash.status}`
+    );
+
+    // Test W: Unsupported HTTP methods and unknown routes return 404
+    const patchDashRes = await request(baseUrl, "/api/dashboard", { method: "PATCH", token: compAToken });
+    const patchEmisRes = await request(baseUrl, "/api/emissions", { method: "PATCH", token: compAToken });
+    const deleteCompaniesRes = await request(baseUrl, "/api/companies", { method: "DELETE", token: adminToken });
+    recordResult(
+      "W",
+      "Unsupported HTTP methods (PATCH/DELETE on unsupported routes) return 404",
+      patchDashRes.status === 404 && patchEmisRes.status === 404 && deleteCompaniesRes.status === 404,
+      `PATCH /api/dashboard: ${patchDashRes.status}, PATCH /api/emissions: ${patchEmisRes.status}, DELETE /api/companies: ${deleteCompaniesRes.status}`
     );
 
     console.log("\n=== Test Summary ===");

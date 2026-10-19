@@ -4,7 +4,8 @@ const http = require("http");
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 
 const { app } = require("../server");
-const { getDb } = require("../config/db");
+const { initDb, getDb, seedUsers } = require("../config/db");
+const { hashPassword } = require("../middleware/auth");
 
 let server;
 let baseUrl;
@@ -43,6 +44,14 @@ function request(method, path, headers = {}, body = null) {
 
 async function runTests() {
   console.log("=== Starting EcoTrack Marketplace & Transactions Verification Tests ===");
+  await initDb();
+  const seedPassword = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
+  await seedUsers([
+    { id: "usr-admin-david", email: "admin@ecotrack.test", passwordHash: hashPassword(seedPassword), role: "ADMIN", companyId: null },
+    { id: "usr-company-a", email: "companya@ecotrack.test", passwordHash: hashPassword(seedPassword), role: "COMPANY_USER", companyId: "company-a" },
+    { id: "usr-company-b", email: "companyb@ecotrack.test", passwordHash: hashPassword(seedPassword), role: "COMPANY_USER", companyId: "company-b" },
+  ]);
+
   const testPort = 59000 + Math.floor(Math.random() * 900);
   server = app.listen(testPort);
   baseUrl = `http://localhost:${testPort}`;
@@ -59,13 +68,13 @@ async function runTests() {
 
   try {
     // Authenticate Admin and Company Users
-    const adminRes = await request("POST", "/api/auth/login", {}, { email: "admin@ecotrack.test", password: "EcoTrackDemo!2026" });
+    const adminRes = await request("POST", "/api/auth/login", {}, { email: "admin@ecotrack.test", password: seedPassword });
     adminToken = adminRes.body.data.token;
 
-    const compARes = await request("POST", "/api/auth/login", {}, { email: "companya@ecotrack.test", password: "EcoTrackDemo!2026" });
+    const compARes = await request("POST", "/api/auth/login", {}, { email: "companya@ecotrack.test", password: seedPassword });
     compAToken = compARes.body.data.token;
 
-    const compBRes = await request("POST", "/api/auth/login", {}, { email: "companyb@ecotrack.test", password: "EcoTrackDemo!2026" });
+    const compBRes = await request("POST", "/api/auth/login", {}, { email: "companyb@ecotrack.test", password: seedPassword });
     compBToken = compBRes.body.data.token;
 
     // Record baseline transaction count & inventory before purchase test
@@ -148,6 +157,7 @@ async function runTests() {
 
     // Test 7: Company A purchases credits successfully
     let initialInventory;
+    let purchasedTxId;
     {
       const projBefore = await request("GET", "/api/marketplace/projects/proj-001");
       initialInventory = projBefore.body.data.availableTCO2e;
@@ -165,11 +175,10 @@ async function runTests() {
       assert.strictEqual(res.body.data.order.subtotal, 725);
       assert.strictEqual(res.body.data.order.serviceFee, 14.5);
       assert.strictEqual(res.body.data.order.total, 739.5);
-      if (res.body.data?.order?.id) {
-        createdTransactionIds.push(res.body.data.order.id);
-      }
-      if (res.body.data?.transaction?.id) {
-        createdTransactionIds.push(res.body.data.transaction.id);
+      purchasedTxId = res.body.data?.transaction?.id || res.body.data?.order?.id;
+      assert(purchasedTxId, "Expected a transaction ID from purchase response");
+      if (!createdTransactionIds.includes(purchasedTxId)) {
+        createdTransactionIds.push(purchasedTxId);
       }
 
       // Verify PostgreSQL decremented inventory
@@ -196,39 +205,37 @@ async function runTests() {
 
     // Test 9: Transactions tenant isolation
     {
-      // Company A sees their purchase
+      // Company A sees their purchase (never collect pre-existing company transactions for cleanup)
       const resA = await request("GET", "/api/transactions", { Authorization: `Bearer ${compAToken}` });
       assert.strictEqual(resA.status, 200);
       assert(resA.body.data.transactions.length >= 1);
-      const hasPurchasedTxn = resA.body.data.transactions.some((t) => t.project === "Amazonia Reforestation Initiative");
+      const hasPurchasedTxn = resA.body.data.transactions.some((t) => t.id === purchasedTxId && t.project === "Amazonia Reforestation Initiative");
       assert(hasPurchasedTxn);
-
-      resA.body.data.transactions.forEach((tx) => {
-        if (!createdTransactionIds.includes(tx.id)) {
-          createdTransactionIds.push(tx.id);
-        }
-      });
 
       // Company B does NOT see Company A's transaction
       const resB = await request("GET", "/api/transactions", { Authorization: `Bearer ${compBToken}` });
       assert.strictEqual(resB.status, 200);
-      const bHasPurchasedTxn = resB.body.data.transactions.some((t) => t.project === "Amazonia Reforestation Initiative");
+      const bHasPurchasedTxn = resB.body.data.transactions.some((t) => t.id === purchasedTxId);
       assert.strictEqual(bHasPurchasedTxn, false);
 
       // Company A cannot request company-b transactions (403)
       const resCross = await request("GET", "/api/transactions?companyId=company-b", { Authorization: `Bearer ${compAToken}` });
       assert.strictEqual(resCross.status, 403);
 
+      // Company B cannot request company-a transactions (403)
+      const resCrossB = await request("GET", "/api/transactions?companyId=company-a", { Authorization: `Bearer ${compBToken}` });
+      assert.strictEqual(resCrossB.status, 403);
+
       // Admin CAN view Company A transactions
       const resAdmin = await request("GET", "/api/transactions?companyId=company-a", { Authorization: `Bearer ${adminToken}` });
       assert.strictEqual(resAdmin.status, 200);
-      assert(resAdmin.body.data.transactions.length >= 1);
+      assert(resAdmin.body.data.transactions.some((t) => t.id === purchasedTxId));
 
       console.log("[PASS] 9: Transactions tenant isolation and Admin company viewing verified");
       passed++;
     }
 
-    // Test 10: Portfolio endpoint
+    // Test 10: Portfolio endpoint & tenant isolation
     {
       const res = await request("GET", "/api/marketplace/portfolio", { Authorization: `Bearer ${compAToken}` });
       assert.strictEqual(res.status, 200);
@@ -237,7 +244,37 @@ async function runTests() {
       assert(res.body.data.totalInvested >= 739.5);
       assert(res.body.data.transactionCount >= 1);
       assert(res.body.data.projectsSupportedCount >= 1);
-      console.log(`[PASS] 10: Portfolio returns real aggregates (Credits: ${res.body.data.totalCreditsRetired}, Invested: $${res.body.data.totalInvested})`);
+
+      // Cross-tenant portfolio access denied (403)
+      const crossPortA = await request("GET", "/api/marketplace/portfolio?companyId=company-b", { Authorization: `Bearer ${compAToken}` });
+      assert.strictEqual(crossPortA.status, 403);
+      const crossPortB = await request("GET", "/api/marketplace/portfolio?companyId=company-a", { Authorization: `Bearer ${compBToken}` });
+      assert.strictEqual(crossPortB.status, 403);
+
+      // Admin portfolio requires companyId (400 without, 200 with)
+      const adminPortMissing = await request("GET", "/api/marketplace/portfolio", { Authorization: `Bearer ${adminToken}` });
+      assert.strictEqual(adminPortMissing.status, 400);
+      const adminPortValid = await request("GET", "/api/marketplace/portfolio?companyId=company-a", { Authorization: `Bearer ${adminToken}` });
+      assert.strictEqual(adminPortValid.status, 200);
+
+      console.log(`[PASS] 10: Portfolio returns real aggregates and enforces tenant isolation (Credits: ${res.body.data.totalCreditsRetired}, Invested: $${res.body.data.totalInvested})`);
+      passed++;
+    }
+
+    // Test 11: Marketplace missing projectId and unknown project validation
+    {
+      const missingProjRes = await request(
+        "POST",
+        "/api/marketplace/purchase",
+        { Authorization: `Bearer ${compAToken}` },
+        { quantityTCO2e: 10 }
+      );
+      assert.strictEqual(missingProjRes.status, 400);
+
+      const unknownProjDetail = await request("GET", "/api/marketplace/projects/proj-nonexistent-999");
+      assert.strictEqual(unknownProjDetail.status, 404);
+
+      console.log("[PASS] 11: Missing projectId (400) and unknown project detail (404) validated");
       passed++;
     }
 

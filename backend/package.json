@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node tests/role-permissions.test.js && node tests/company-management.test.js && node tests/dashboard-metrics.test.js && node tests/marketplace-and-transactions.test.js"
+    "test": "node tests/role-permissions.test.js && node tests/company-management.test.js && node tests/dashboard-metrics.test.js && node tests/marketplace-and-transactions.test.js",
+    "test:postman": "node tests/run-postman-collection.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

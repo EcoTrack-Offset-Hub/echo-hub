@@ -1,7 +1,8 @@
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const http = require("http");
 const { app } = require("../server");
-const { initDb, getDb, getDashboardData } = require("../config/db");
+const { initDb, getDb, getDashboardData, seedUsers } = require("../config/db");
+const { hashPassword } = require("../middleware/auth");
 
 async function request(serverUrl, path, options = {}) {
   const url = `${serverUrl}${path}`;
@@ -28,6 +29,12 @@ async function request(serverUrl, path, options = {}) {
 async function runDashboardTests() {
   console.log("=== Starting EcoTrack Company Dashboard Verification Tests ===");
   await initDb();
+  const initialPassword = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
+  await seedUsers([
+    { id: "usr-admin-david", email: "admin@ecotrack.test", passwordHash: hashPassword(initialPassword), role: "ADMIN", companyId: null },
+    { id: "usr-company-a", email: "companya@ecotrack.test", passwordHash: hashPassword(initialPassword), role: "COMPANY_USER", companyId: "company-a" },
+    { id: "usr-company-b", email: "companyb@ecotrack.test", passwordHash: hashPassword(initialPassword), role: "COMPANY_USER", companyId: "company-b" },
+  ]);
 
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, resolve));
@@ -40,8 +47,8 @@ async function runDashboardTests() {
     console.log(`[${passed ? "PASS" : "FAIL"}] ${id}: ${description} ${detail ? `(${detail})` : ""}`);
   };
 
-  const initialPassword = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
   const db = await getDb();
+  let tempIncompleteId = null;
 
   try {
     // Authenticate Company A
@@ -113,7 +120,7 @@ async function runDashboardTests() {
     );
 
     // 5b. Data completeness: one incomplete
-    const tempIncompleteId = `temp-incomplete-${Date.now()}`;
+    tempIncompleteId = `temp-incomplete-${Date.now()}`;
     await db.query(
       `INSERT INTO emissions (id, company_id, date, activity, scope, category, quantity, emissions, status, facility, reporting_period)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
@@ -128,6 +135,7 @@ async function runDashboardTests() {
       `Complete: ${incompData?.completeRecords}/${incompData?.totalRecords}, Incomplete: ${incompData?.incompleteRecords}`
     );
     await db.query("DELETE FROM emissions WHERE id = $1", [tempIncompleteId]);
+    tempIncompleteId = null;
 
     // 5c. Data completeness: zero records
     const emptyCompData = await getDashboardData("company-a", "Q1 2026");
@@ -232,6 +240,9 @@ async function runDashboardTests() {
   } catch (err) {
     console.error("Test failure:", err);
   } finally {
+    if (tempIncompleteId) {
+      await db.query("DELETE FROM emissions WHERE id = $1", [tempIncompleteId]);
+    }
     server.close();
   }
 
