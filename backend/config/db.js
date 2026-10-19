@@ -1,21 +1,17 @@
 // PostgreSQL data-access layer. All backend database queries stay in this file.
 let pgPool = null;
 
-// Enforce verified TLS for the Supabase PostgreSQL connection.
-function secureSupabaseConnectionString(databaseUrl) {
-  const caPath = process.env.SUPABASE_SSL_ROOT_CERT_PATH;
-  if (!caPath) {
-    throw new Error("SUPABASE_SSL_ROOT_CERT_PATH is required for verified Supabase TLS. Download the database root certificate from Supabase Dashboard and set its server-only path.");
-  }
+// Enforce verified TLS using the CA certificates bundled with Node/Render.
+// Removing URI SSL options prevents node-postgres from overriding this secure setting.
+function securePostgresConfig(databaseUrl) {
+  const connectionString = databaseUrl
+    .replace(/([?&])(sslmode|sslrootcert|sslcert|sslkey)=[^&]*/gi, "$1")
+    .replace(/[?&]$/, "");
 
-  let connectionString = databaseUrl.replace(/([?&])sslmode=[^&]*/i, "$1sslmode=verify-full");
-  if (!/[?&]sslmode=/i.test(connectionString)) {
-    connectionString += `${connectionString.includes("?") ? "&" : "?"}sslmode=verify-full`;
-  }
-  if (!/[?&]sslrootcert=/i.test(connectionString)) {
-    connectionString += `&sslrootcert=${encodeURIComponent(caPath)}`;
-  }
-  return connectionString;
+  return {
+    connectionString,
+    ssl: { rejectUnauthorized: true },
+  };
 }
 
 // Create one reusable connection pool rather than reconnecting for each request.
@@ -25,7 +21,7 @@ async function getDb() {
   }
   if (!pgPool) {
     const { Pool } = require("pg");
-    pgPool = new Pool({ connectionString: secureSupabaseConnectionString(process.env.DATABASE_URL) });
+    pgPool = new Pool(securePostgresConfig(process.env.DATABASE_URL));
   }
   return {
     type: "pg",
