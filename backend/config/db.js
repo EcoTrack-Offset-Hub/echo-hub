@@ -1,16 +1,18 @@
 // PostgreSQL data-access layer. All backend database queries stay in this file.
 let pgPool = null;
 
-// Enforce verified TLS using the CA certificates bundled with Node/Render.
-// Removing URI SSL options prevents node-postgres from overriding this secure setting.
+// Use TLS for every PostgreSQL connection. Strict certificate verification is the
+// default; some managed poolers require it to be disabled when they serve a
+// private/self-signed CA chain.
 function securePostgresConfig(databaseUrl) {
   const connectionString = databaseUrl
     .replace(/([?&])(sslmode|sslrootcert|sslcert|sslkey)=[^&]*/gi, "$1")
     .replace(/[?&]$/, "");
+  const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false";
 
   return {
     connectionString,
-    ssl: { rejectUnauthorized: true },
+    ssl: { rejectUnauthorized },
   };
 }
 
