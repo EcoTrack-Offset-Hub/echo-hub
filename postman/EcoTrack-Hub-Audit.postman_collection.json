@@ -1,0 +1,793 @@
+{
+  "info": {
+    "name": "EcoTrack Hub — API Audit",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Secret-free collection derived from backend/server.js. Populate environment values locally before running. Write and destructive operations are clearly marked. Collection preparation/import is not a substitute for manual Postman execution."
+  },
+  "variable": [
+    { "key": "json", "value": "application/json" },
+    {
+      "key": "validEmission",
+      "value": "{\"category\":\"Purchased Electricity\",\"consumption\":100,\"unit\":\"kWh\",\"facility\":\"Audit Facility\",\"reportingPeriod\":\"Current Period\"}"
+    }
+  ],
+  "item": [
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Health",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 and healthy payload', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.status).to.eql('healthy');",
+                  "  pm.expect(b.service).to.eql('ecotrack-backend');",
+                  "  pm.expect(b.database).to.eql('postgresql');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API Health Alias",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/health" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 and healthy payload', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.status).to.eql('healthy');",
+                  "  pm.expect(b.database).to.eql('postgresql');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marketplace Catalog",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/marketplace?category={{marketplaceCategory}}&standard={{marketplaceStandard}}&search={{search}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 with projects and stats', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.projects).to.be.an('array');",
+                  "  pm.expect(b.data.stats).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marketplace Catalog Alias",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/marketplace/projects" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 with projects array', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.projects).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marketplace Project",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/marketplace/projects/{{projectId}}" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 with project details', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.id).to.eql(pm.environment.get('projectId'));",
+                  "  pm.expect(b.data.availableTCO2e).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login — Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{seedPassword}}\"}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('admin login succeeded', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.user.role).to.eql('ADMIN');",
+                  "  pm.expect(b.data.token).to.be.a('string');",
+                  "  pm.environment.set('adminToken', b.data.token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — Company A",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{companyAEmail}}\",\"password\":\"{{seedPassword}}\"}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('company A login succeeded', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.user.companyId).to.eql('company-a');",
+                  "  pm.environment.set('companyAToken', b.data.token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — Company B",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{companyBEmail}}\",\"password\":\"{{seedPassword}}\"}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('company B login succeeded', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.user.companyId).to.eql('company-b');",
+                  "  pm.environment.set('companyBToken', b.data.token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — Invalid Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"invalid\"}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('invalid credentials rejected with 401', () => {",
+                  "  pm.response.to.have.status(401);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Emissions and Dashboard",
+      "item": [
+        {
+          "name": "Calculate Emissions",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{companyAToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{{validEmission}}" },
+            "url": "{{baseUrl}}/api/emissions/calculate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('calculation returns 200 and result fields', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.resultKg).to.be.a('number');",
+                  "  pm.expect(b.data.resultTonnes).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Emissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/emissions?companyId={{companyAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('returns 200 and emissions list', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.records).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Emission (writes data)",
+          "request": {
+            "method": "POST",
+            "description": "WARNING: Writes a new emission record to PostgreSQL for Company A. Clean up using Delete Emission afterwards.",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{companyAToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{{validEmission}}" },
+            "url": "{{baseUrl}}/api/emissions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('created with 201 and record id', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.record.id).to.be.a('string');",
+                  "  pm.environment.set('emissionId', b.data.record.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Emission (writes data)",
+          "request": {
+            "method": "PUT",
+            "description": "WARNING: Modifies the emission record identified by {{emissionId}} in PostgreSQL.",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{companyAToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{{validEmission}}" },
+            "url": "{{baseUrl}}/api/emissions/{{emissionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('updated with 200 and recalculated data', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.record.id).to.eql(pm.environment.get('emissionId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Emission (destructive)",
+          "request": {
+            "method": "DELETE",
+            "description": "DESTRUCTIVE: Permanently deletes the emission record identified by {{emissionId}}. Only run against test-created records.",
+            "header": [{ "key": "Authorization", "value": "Bearer {{companyAToken}}" }],
+            "url": "{{baseUrl}}/api/emissions/{{emissionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('deleted with 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/dashboard?companyId={{companyAId}}&period=Current%20Period&range=6M"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('returns 200 with dashboard metrics', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.company.id).to.eql(pm.environment.get('companyAId'));",
+                  "  pm.expect(b.data.emissions).to.be.an('object');",
+                  "  pm.expect(b.data.scopes).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/reports?companyId={{companyAId}}&month={{reportMonth}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('returns 200 with report aggregation', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.companyId).to.eql(pm.environment.get('companyAId'));",
+                  "  pm.expect(b.data.breakdown).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Administration",
+      "item": [
+        {
+          "name": "List Companies",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/companies"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('returns 200 and companies array', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Company (writes data / destructive if not cleaned)",
+          "request": {
+            "method": "POST",
+            "description": "WARNING: Creates a new company and user row in PostgreSQL.",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Audit Example Company {{$timestamp}}\",\"email\":\"audit.{{$timestamp}}@example.invalid\",\"password\":\"replace-locally\"}"
+            },
+            "url": "{{baseUrl}}/api/companies"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('company created with 201', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.company.id).to.be.a('string');",
+                  "  pm.environment.set('createdAuditCompanyId', b.data.company.id);",
+                  "  pm.environment.set('createdAuditUserId', b.data.user.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Company (writes data)",
+          "request": {
+            "method": "PUT",
+            "description": "WARNING: Updates company metadata in PostgreSQL.",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Company A\"}" },
+            "url": "{{baseUrl}}/api/companies/{{companyAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('company updated with 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.id).to.eql(pm.environment.get('companyAId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password (writes data / destructive to active password)",
+          "request": {
+            "method": "POST",
+            "description": "DESTRUCTIVE WARNING: Resets the primary user password for {{companyAId}}. Set {{seedPassword}} to restore.",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"newPassword\":\"{{seedPassword}}\",\"confirmPassword\":\"{{seedPassword}}\"}"
+            },
+            "url": "{{baseUrl}}/api/companies/{{companyAId}}/reset-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('password reset returns 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set Company Status (writes data)",
+          "request": {
+            "method": "POST",
+            "description": "WARNING: Updates company status ('Active' or 'Inactive') in PostgreSQL.",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"status\":\"Active\"}" },
+            "url": "{{baseUrl}}/api/companies/{{companyAId}}/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('company status updated with 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.status).to.eql('Active');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Purchase Credits (writes data / decrements inventory)",
+          "request": {
+            "method": "POST",
+            "description": "DESTRUCTIVE/WRITE WARNING: Atomically decrements project inventory and inserts a transaction row in PostgreSQL.",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{companyAToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"projectId\":\"{{projectId}}\",\"quantityTCO2e\":1}" },
+            "url": "{{baseUrl}}/api/marketplace/purchase"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('purchase returns 200 with order and transaction', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.order.id).to.be.a('string');",
+                  "  pm.expect(b.data.transaction.certificateId).to.be.a('string');",
+                  "  pm.environment.set('purchasedAuditTxId', b.data.transaction.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{companyAToken}}" }],
+            "url": "{{baseUrl}}/api/transactions?status={{transactionStatus}}&project={{projectName}}&search={{search}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('returns 200 and transactions array', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.transactions).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Portfolio",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{companyAToken}}" }],
+            "url": "{{baseUrl}}/api/marketplace/portfolio?companyId={{companyAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('returns 200 and portfolio summary', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b.data.totalCreditsRetired).to.be.a('number');",
+                  "  pm.expect(b.data.breakdown).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Negative and Isolation",
+      "item": [
+        {
+          "name": "Protected Dashboard — No Token",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/dashboard?companyId={{companyAId}}" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('authentication required (401)', () => {",
+                  "  pm.response.to.have.status(401);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Company A Cannot Read Company B Emissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{companyAToken}}" }],
+            "url": "{{baseUrl}}/api/emissions?companyId={{companyBId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('cross-tenant request denied (403)', () => {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Company A Cannot Read Company B Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{companyAToken}}" }],
+            "url": "{{baseUrl}}/api/transactions?companyId={{companyBId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('cross-tenant transactions denied (403)', () => {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Dashboard Missing Company",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/api/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('companyId selection required (400)', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Calculate Emissions — Invalid Payload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{companyAToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"category\":\"Nope\",\"consumption\":-1,\"unit\":\"x\"}" },
+            "url": "{{baseUrl}}/api/emissions/calculate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('invalid data rejected (400)', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Purchase Credits — Exceeds Inventory (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{companyAToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"projectId\":\"{{projectId}}\",\"quantityTCO2e\":999999999}" },
+            "url": "{{baseUrl}}/api/marketplace/purchase"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('over-purchase rejected (422)', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unsupported Method — PATCH Dashboard (404)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{companyAToken}}" }],
+            "url": "{{baseUrl}}/api/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('unsupported PATCH rejected (404)', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

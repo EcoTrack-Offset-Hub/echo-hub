@@ -1,7 +1,9 @@
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const http = require("http");
+const assert = require("assert");
 const { app } = require("../server");
-const { initDb, getDb, findCompanyById } = require("../config/db");
+const { initDb, getDb, findCompanyById, seedUsers } = require("../config/db");
+const { hashPassword } = require("../middleware/auth");
 
 async function request(serverUrl, path, options = {}) {
   const url = `${serverUrl}${path}`;
@@ -28,6 +30,25 @@ async function request(serverUrl, path, options = {}) {
 async function runTests() {
   console.log("=== Starting EcoTrack Admin Company Account Management Tests ===");
   await initDb();
+  const db = await getDb();
+
+  const initialPassword = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
+  const initialPasswordHash = hashPassword(initialPassword);
+  const newPassword = "NewSecurePassword!2026";
+  const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const updatedCompanyName = `Davao Green Logistics ${uniqueSuffix}`;
+  const updatedCompanyEmail = `sustainability.${uniqueSuffix}@davaogreen.com`;
+
+  // Ensure required seed companies and users exist in known active state before tests run
+  await seedUsers([
+    { id: "usr-admin-david", email: "admin@ecotrack.test", passwordHash: initialPasswordHash, role: "ADMIN", companyId: null },
+    { id: "usr-company-a", email: "companya@ecotrack.test", passwordHash: initialPasswordHash, role: "COMPANY_USER", companyId: "company-a" },
+    { id: "usr-company-b", email: "companyb@ecotrack.test", passwordHash: initialPasswordHash, role: "COMPANY_USER", companyId: "company-b" },
+  ]);
+  await db.query("UPDATE companies SET name = 'Company A', status = 'Active' WHERE id = 'company-a'");
+  await db.query("UPDATE companies SET name = 'Company B', status = 'Active' WHERE id = 'company-b'");
+  await db.query("UPDATE users SET email = 'companya@ecotrack.test', password_hash = $1 WHERE id = 'usr-company-a'", [initialPasswordHash]);
+  await db.query("UPDATE users SET email = 'companyb@ecotrack.test', password_hash = $1 WHERE id = 'usr-company-b'", [initialPasswordHash]);
 
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, resolve));
@@ -41,8 +62,7 @@ async function runTests() {
     console.log(`[${passed ? "PASS" : "FAIL"}] ${id}: ${description} ${detail ? `(${detail})` : ""}`);
   };
 
-  const initialPassword = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
-  const newPassword = "NewSecurePassword!2026";
+  let createdFixtureEmissionId = null;
 
   try {
     // 1. Admin login
@@ -61,24 +81,45 @@ async function runTests() {
     const compAToken = compALogin.data?.data?.token;
     recordResult("2", "Company A initial login works", compALogin.status === 200 && !!compAToken);
 
-    // 3. Check Company A initial emissions and transactions count
-    const compAEmissionsBefore = await request(baseUrl, "/api/emissions", { token: compAToken });
-    const emissionsCountBefore = compAEmissionsBefore.data?.data?.records?.length || 0;
-    recordResult("3", "Company A initial emissions readable", compAEmissionsBefore.status === 200, `Count: ${emissionsCountBefore}`);
+    // Create an explicit test-owned emission fixture so the test never assumes a pre-existing row count
+    const fixtureEmisRes = await request(baseUrl, "/api/emissions", {
+      method: "POST",
+      token: compAToken,
+      body: {
+        category: "Purchased Electricity",
+        consumption: 250,
+        unit: "kWh",
+        facility: `Fixture Facility ${uniqueSuffix}`,
+        reportingPeriod: "Q2 2026",
+      },
+    });
+    createdFixtureEmissionId = fixtureEmisRes.data?.data?.record?.id || null;
 
-    // 4. Edit Company A Name & Email (Davao Green Logistics / sustainability@davaogreen.com)
+    // 3. Check Company A initial emissions count (including explicit test-owned fixture)
+    const compAEmissionsBefore = await request(baseUrl, "/api/emissions", { token: compAToken });
+    const recordsBefore = compAEmissionsBefore.data?.data?.records || [];
+    const emissionsCountBefore = recordsBefore.length;
+    const hasFixtureBefore = Boolean(createdFixtureEmissionId && recordsBefore.some((r) => r.id === createdFixtureEmissionId));
+    recordResult(
+      "3",
+      "Company A initial emissions readable with explicit fixture",
+      compAEmissionsBefore.status === 200 && emissionsCountBefore >= 1 && hasFixtureBefore,
+      `Count: ${emissionsCountBefore}, Fixture: ${createdFixtureEmissionId}`
+    );
+
+    // 4. Edit Company A Name & Email using unique test values
     const updateRes = await request(baseUrl, "/api/companies/company-a", {
       method: "PUT",
       token: adminToken,
       body: {
-        name: "Davao Green Logistics",
-        email: "sustainability@davaogreen.com",
+        name: updatedCompanyName,
+        email: updatedCompanyEmail,
       },
     });
     recordResult(
       "4",
       "Admin updates Company A name and email",
-      updateRes.status === 200 && updateRes.data?.data?.name === "Davao Green Logistics",
+      updateRes.status === 200 && updateRes.data?.data?.name === updatedCompanyName && updateRes.data?.data?.userEmail === updatedCompanyEmail,
       `Status: ${updateRes.status}, Name: ${updateRes.data?.data?.name}`
     );
 
@@ -87,7 +128,7 @@ async function runTests() {
     recordResult(
       "5",
       "Tenant ID company-a preserved in database",
-      compCheck && compCheck.id === "company-a" && compCheck.name === "Davao Green Logistics"
+      Boolean(compCheck && compCheck.id === "company-a" && compCheck.name === updatedCompanyName)
     );
 
     // 6. Verify old email fails login
@@ -100,23 +141,25 @@ async function runTests() {
     // 7. Verify new email logs in with existing password
     const newEmailLogin = await request(baseUrl, "/api/auth/login", {
       method: "POST",
-      body: { email: "sustainability@davaogreen.com", password: initialPassword },
+      body: { email: updatedCompanyEmail, password: initialPassword },
     });
     const compANewToken = newEmailLogin.data?.data?.token;
     recordResult(
       "7",
       "New login email logs in with existing password",
-      newEmailLogin.status === 200 && !!compANewToken,
+      newEmailLogin.status === 200 && !!compANewToken && newEmailLogin.data?.data?.user?.companyId === "company-a",
       `Company ID in token payload: ${newEmailLogin.data?.data?.user?.companyId}`
     );
 
     // 8. Verify existing emissions, dashboard, and reports remain linked to company-a
     const compAEmissionsAfter = await request(baseUrl, "/api/emissions", { token: compANewToken });
-    const emissionsCountAfter = compAEmissionsAfter.data?.data?.records?.length || 0;
+    const recordsAfter = compAEmissionsAfter.data?.data?.records || [];
+    const emissionsCountAfter = recordsAfter.length;
+    const hasFixtureAfter = Boolean(createdFixtureEmissionId && recordsAfter.some((r) => r.id === createdFixtureEmissionId));
     recordResult(
       "8",
       "Existing emissions still linked to tenant company-a",
-      compAEmissionsAfter.status === 200 && emissionsCountAfter === emissionsCountBefore,
+      compAEmissionsAfter.status === 200 && emissionsCountAfter === emissionsCountBefore && hasFixtureAfter,
       `Before: ${emissionsCountBefore}, After: ${emissionsCountAfter}`
     );
 
@@ -126,7 +169,7 @@ async function runTests() {
       token: adminToken,
       body: {
         name: "Company B",
-        email: "sustainability@davaogreen.com", // already used by company-a
+        email: updatedCompanyEmail, // already used by company-a
       },
     });
     recordResult(
@@ -174,14 +217,14 @@ async function runTests() {
     // 13. Old password fails login
     const oldPasswordLogin = await request(baseUrl, "/api/auth/login", {
       method: "POST",
-      body: { email: "sustainability@davaogreen.com", password: initialPassword },
+      body: { email: updatedCompanyEmail, password: initialPassword },
     });
     recordResult("13", "Old password fails login after reset", oldPasswordLogin.status === 401);
 
     // 14. New password succeeds login
     const newPasswordLogin = await request(baseUrl, "/api/auth/login", {
       method: "POST",
-      body: { email: "sustainability@davaogreen.com", password: newPassword },
+      body: { email: updatedCompanyEmail, password: newPassword },
     });
     const compAResetToken = newPasswordLogin.data?.data?.token;
     recordResult("14", "New password succeeds login", newPasswordLogin.status === 200 && !!compAResetToken);
@@ -209,12 +252,12 @@ async function runTests() {
     // 17. Inactive company user login rejected with 403 Forbidden
     const inactiveLogin = await request(baseUrl, "/api/auth/login", {
       method: "POST",
-      body: { email: "sustainability@davaogreen.com", password: newPassword },
+      body: { email: updatedCompanyEmail, password: newPassword },
     });
     recordResult(
       "17",
       "Inactive company user login returns 403 Forbidden",
-      inactiveLogin.status === 403 && inactiveLogin.data?.error?.includes("deactivated"),
+      inactiveLogin.status === 403 && Boolean(inactiveLogin.data?.error?.includes("deactivated")),
       `Status: ${inactiveLogin.status}, Error: ${inactiveLogin.data?.error}`
     );
 
@@ -222,10 +265,12 @@ async function runTests() {
     const adminViewEmissions = await request(baseUrl, "/api/emissions?companyId=company-a", {
       token: adminToken,
     });
+    const deactivatedRecords = adminViewEmissions.data?.data?.records || [];
+    const hasFixtureWhileInactive = Boolean(createdFixtureEmissionId && deactivatedRecords.some((r) => r.id === createdFixtureEmissionId));
     recordResult(
       "18",
       "Historical data intact while company is deactivated",
-      adminViewEmissions.status === 200 && (adminViewEmissions.data?.data?.records?.length || 0) === emissionsCountBefore
+      adminViewEmissions.status === 200 && deactivatedRecords.length === emissionsCountBefore && hasFixtureWhileInactive
     );
 
     // 19. Admin reactivates Company A
@@ -243,7 +288,7 @@ async function runTests() {
     // 20. Reactivated company user can log in again
     const reactivatedLogin = await request(baseUrl, "/api/auth/login", {
       method: "POST",
-      body: { email: "sustainability@davaogreen.com", password: newPassword },
+      body: { email: updatedCompanyEmail, password: newPassword },
     });
     recordResult("20", "Reactivated company user logs in successfully", reactivatedLogin.status === 200);
 
@@ -252,11 +297,10 @@ async function runTests() {
       method: "POST",
       body: { email: "companyb@ecotrack.test", password: initialPassword },
     });
-    recordResult("21", "Company B account unaffected and functional", compBLogin.status === 200);
+    const compBToken = compBLogin.data?.data?.token;
+    recordResult("21", "Company B account unaffected and functional", compBLogin.status === 200 && !!compBToken);
 
-    // CLEANUP / RESTORE DEMO CREDENTIALS:
-    // Restore name = "Company A", email = "companya@ecotrack.test", password = initialPassword, status = "Active"
-    console.log("\n--- Restoring Company A seed credentials ---");
+    // 22. Restore Company A seed credentials via API and verify login
     await request(baseUrl, "/api/companies/company-a", {
       method: "PUT",
       token: adminToken,
@@ -273,7 +317,6 @@ async function runTests() {
       body: { status: "Active" },
     });
 
-    // Verify restored credentials work
     const restoredLogin = await request(baseUrl, "/api/auth/login", {
       method: "POST",
       body: { email: "companya@ecotrack.test", password: initialPassword },
@@ -283,7 +326,69 @@ async function runTests() {
       "Company A demo seed credentials restored successfully",
       restoredLogin.status === 200 && restoredLogin.data?.data?.user?.email === "companya@ecotrack.test"
     );
+
+    // 23. Validation & authorization checks on company management endpoints
+    const badCreateRes = await request(baseUrl, "/api/companies", {
+      method: "POST",
+      token: adminToken,
+      body: { name: "A", email: "not-an-email", password: "123" },
+    });
+    const dupNameCreateRes = await request(baseUrl, "/api/companies", {
+      method: "POST",
+      token: adminToken,
+      body: { name: "Company A", email: `unique.${uniqueSuffix}@ecotrack.test`, password: "ValidPassword!2026" },
+    });
+    const badUpdateRes = await request(baseUrl, "/api/companies/company-a", {
+      method: "PUT",
+      token: adminToken,
+      body: { name: "X", email: "invalid-email" },
+    });
+    const unknownCompanyPut = await request(baseUrl, "/api/companies/company-unknown-999", {
+      method: "PUT",
+      token: adminToken,
+      body: { name: "Valid Name" },
+    });
+    const badStatusRes = await request(baseUrl, "/api/companies/company-a/status", {
+      method: "POST",
+      token: adminToken,
+      body: { status: "Suspended" },
+    });
+    const userStatusAttempt = await request(baseUrl, "/api/companies/company-a/status", {
+      method: "POST",
+      token: compBToken,
+      body: { status: "Inactive" },
+    });
+    recordResult(
+      "23",
+      "Company-management validation (400/404/409) and status RBAC (403) enforced",
+      badCreateRes.status === 400 &&
+        dupNameCreateRes.status === 409 &&
+        badUpdateRes.status === 400 &&
+        unknownCompanyPut.status === 404 &&
+        badStatusRes.status === 400 &&
+        userStatusAttempt.status === 403,
+      `BadCreate:${badCreateRes.status}, DupName:${dupNameCreateRes.status}, BadUpdate:${badUpdateRes.status}, Unknown:${unknownCompanyPut.status}, BadStatus:${badStatusRes.status}, UserStatus:${userStatusAttempt.status}`
+    );
   } finally {
+    // Always restore Company A state and delete ONLY test-owned fixture records
+    try {
+      if (createdFixtureEmissionId) {
+        await db.query("DELETE FROM emissions WHERE id = $1", [createdFixtureEmissionId]);
+      }
+      await db.query("UPDATE companies SET name = 'Company A', status = 'Active' WHERE id = 'company-a'");
+      await db.query("UPDATE companies SET name = 'Company B', status = 'Active' WHERE id = 'company-b'");
+      await db.query("UPDATE users SET email = 'companya@ecotrack.test', password_hash = $1 WHERE id = 'usr-company-a'", [initialPasswordHash]);
+      await db.query("UPDATE users SET email = 'companyb@ecotrack.test', password_hash = $1 WHERE id = 'usr-company-b'", [initialPasswordHash]);
+
+      const checkFixture = createdFixtureEmissionId
+        ? await db.query("SELECT id FROM emissions WHERE id = $1", [createdFixtureEmissionId])
+        : { rows: [] };
+      assert.strictEqual(checkFixture.rows.length, 0, "Test-owned emission fixture was not cleaned up");
+      console.log("[CLEANUP] Company management test state and test-owned fixture cleanly restored.");
+    } catch (cleanupErr) {
+      console.error("[CLEANUP FAILURE] Company management cleanup failed:", cleanupErr.message);
+      results.push({ id: "CLEANUP", description: "Teardown & restoration", passed: false, detail: cleanupErr.message });
+    }
     server.close();
   }
 
