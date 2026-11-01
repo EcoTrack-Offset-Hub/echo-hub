@@ -39,20 +39,25 @@ function verifyToken(token) {
   const [head, body, signature] = String(token || "").split(".");
   if (!head || !body || !signature) return null;
   const expected = crypto.createHmac("sha256", secret()).update(`${head}.${body}`).digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  if (Buffer.byteLength(signature) !== Buffer.byteLength(expected) || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
   return payload.exp > Math.floor(Date.now() / 1000) ? payload : null;
 }
 // Express middleware used by every protected API route.
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   try {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
     const user = verifyToken(token);
     if (!user) return res.status(401).json({ success: false, error: "Authentication is required." });
+    if (user.role === 'COMPANY_USER') {
+      const db = await require('../config/db').getDb();
+      const { rows } = await db.query('SELECT status FROM companies WHERE id=$1', [user.companyId]);
+      if (!rows.length || rows[0].status !== 'Active') return res.status(403).json({ success: false, error: 'This company account is inactive or no longer exists.' });
+    }
     req.user = user;
     next();
-  } catch (error) {
-    next(error);
+  } catch {
+    return res.status(401).json({success:false,error:"Authentication is required."});
   }
 }
 

@@ -36,10 +36,10 @@ export const PurchaseSuccessModal: React.FC<PurchaseSuccessModalProps> = ({
 
         <div className="space-y-1">
           <h3 className="text-lg font-bold text-[#111827]">
-            Carbon Credits Retired
+            Carbon Credits Purchased
           </h3>
           <p className="text-xs text-[#5F6B61]">
-            Your offset purchase has been confirmed and verified on the registry.
+            Your purchase has been recorded. Registry retirement requires separate evidence.
           </p>
         </div>
 
@@ -48,7 +48,7 @@ export const PurchaseSuccessModal: React.FC<PurchaseSuccessModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-[#166534] uppercase tracking-wider flex items-center gap-1">
               <Award className="w-3.5 h-3.5" />
-              Retirement Certificate
+              Purchase Reference
             </span>
             <span className="text-[10px] font-mono text-[#15803D] bg-white/80 px-2 py-0.5 rounded-md font-semibold">
               {order.certificateId}
@@ -64,7 +64,7 @@ export const PurchaseSuccessModal: React.FC<PurchaseSuccessModalProps> = ({
 
           <div className="pt-2 border-t border-[#BBF7D0]/60 flex items-center justify-between text-[11px] text-[#15803D]">
             <span>Date: {order.date}</span>
-            <span className="font-bold">Status: Verified & Retired</span>
+            <span className="font-bold">Status: Purchase Completed</span>
           </div>
         </div>
 

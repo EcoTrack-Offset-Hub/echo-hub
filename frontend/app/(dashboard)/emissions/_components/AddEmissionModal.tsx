@@ -52,7 +52,7 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
   );
   const [unit, setUnit] = useState<string>(initialData?.unit || "kWh");
   const [reportingPeriod, setReportingPeriod] = useState<string>(
-    initialData?.reportingPeriod || "August 2026"
+    initialData?.reportingPeriod || new Date().toISOString().slice(0,7)
   );
   const [facility, setFacility] = useState<string>(
     initialData?.facility || "Headquarters Building A"
@@ -79,7 +79,7 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
     if (cat === "Purchased Electricity") setUnit("kWh");
     else if (cat === "Fleet & Fuel") setUnit("L");
     else if (cat === "Business Travel") setUnit("passenger-km");
-    else if (cat === "Purchased Goods") setUnit("tons");
+    else if (cat === "Purchased Goods") setUnit("tonnes");
     else if (cat === "Logistics & Freight") setUnit("shipments");
     else if (cat === "Facilities") setUnit("m³");
   };

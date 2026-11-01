@@ -17,7 +17,9 @@ export interface AuthSession {
 }
 
 export interface Company {
+  monthlyEmissionsLimit?: string | null;
   id: string;
+  tenantCode?: string;
   name: string;
   status?: "Active" | "Inactive";
   createdAt?: string;
@@ -71,6 +73,9 @@ export interface EmissionRecord {
   isNew?: boolean;
   companyId?: string;
   rawInput?: string;
+  revision?: string;
+  reviewComment?: string;
+  calculationDetails?: CalculationResult;
   formula?: string;
   resultKg?: number;
   resultTonnes?: number;
@@ -92,6 +97,14 @@ export interface EmissionCalculationInput {
 
 // Transparent calculation details returned by the backend.
 export interface CalculationResult {
+  resultTonnesExact?: string;
+  resultKgExact?: string;
+  factorUnit?: string;
+  source?: string;
+  assumptions?: string;
+  normalizedInput?: string;
+  normalizedUnit?: string;
+  factorVersionId?: number;
   input: string;
   unit: string;
   conversionFactor: number;
@@ -117,6 +130,11 @@ export type ProjectCategory =
 
 // Marketplace and transaction models currently support the prototype UI.
 export interface MarketplaceProject {
+  registryUrl?: string;
+  registryRef?: string;
+  certificationEvidence?: string;
+  certificationReviewedAt?: string;
+  lifecycleStatus?: string;
   id: string;
   name: string;
   location: string;
@@ -128,7 +146,7 @@ export interface MarketplaceProject {
   pricePerTonne: number;
   availableTCO2e: number;
   imageUrl: string;
-  badge: "Verified" | "Gold Standard";
+  badge: "Verified" | "Gold Standard" | "Evidence Reviewed" | "Review Pending";
   isSaved?: boolean;
 }
 

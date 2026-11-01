@@ -113,7 +113,7 @@ export default function ReportsPage() {
                 <Metric
                   icon={<FileText className="w-4 h-4" />}
                   label="Total Estimated Emissions"
-                  value={`${report.totalCo2e.toLocaleString()} tCO₂e`}
+                  value={`${report.totalCo2e.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`}
                 />
                 <Metric
                   icon={<ShieldCheck className="w-4 h-4" />}
@@ -136,7 +136,7 @@ export default function ReportsPage() {
                     {report.breakdown.map((item) => (
                       <div key={item.category} className="px-5 py-4 flex items-center justify-between">
                         <span className="text-sm font-semibold text-[#111827]">{item.category}</span>
-                        <span className="text-sm font-bold text-[#2E7D32]">{item.co2e.toLocaleString()} tCO₂e</span>
+                        <span className="text-sm font-bold text-[#2E7D32]">{item.co2e.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e</span>
                       </div>
                     ))}
                   </div>

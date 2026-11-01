@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
@@ -16,21 +17,19 @@ import {
   Plus,
   ShieldAlert,
   CheckCircle2,
-  ExternalLink,
   Mail,
   Lock,
-  Layers,
-  FileText,
   MoreVertical,
   Pencil,
   KeyRound,
   Power,
+  Trash2,
 } from "lucide-react";
 import { Company } from "@/types";
 
 export default function CompaniesPage() {
   const router = useRouter();
-  const { user, selectedCompanyId, setSelectedCompanyId, companies, refreshCompanies } = useAuthSession();
+  const { selectedCompanyId, setSelectedCompanyId, companies, refreshCompanies, isAdminWorkspace } = useAuthSession();
 
   // Registration Modal & Form States
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -42,13 +41,48 @@ export default function CompaniesPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [openActionsCompanyId, setOpenActionsCompanyId] = useState<string | null>(null);
+  const [actionsPosition, setActionsPosition] = useState({ top: 0, right: 0, above: false });
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const actionsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [resettingPasswordFor, setResettingPasswordFor] = useState<Company | null>(null);
   const [statusCompany, setStatusCompany] = useState<Company | null>(null);
+  const [deletingCompany, setDeletingCompany] = useState<Company | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  useEffect(() => {
+    if (!openActionsCompanyId) return;
+    const close = () => setOpenActionsCompanyId(null);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!actionsMenuRef.current?.contains(target) && !actionsTriggerRef.current?.contains(target)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close();
+        actionsTriggerRef.current?.focus();
+      }
+    };
+    const onScroll = (event: Event) => {
+      if (!(event.target instanceof Node) || !actionsMenuRef.current?.contains(event.target)) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [openActionsCompanyId]);
+
+  useEffect(()=>{const timer=setTimeout(()=>{if(new URLSearchParams(window.location.search).get('register')==='1')setIsRegisterModalOpen(true);},0);return()=>clearTimeout(timer);},[]);
   // If user is not ADMIN, show access restricted view (tenant boundary defense)
-  if (user.role !== "ADMIN") {
+  if (!isAdminWorkspace) {
     return (
       <div className="flex-1 flex flex-col min-h-screen">
         <Header title="Companies" subtitle="Tenant administration" />
@@ -129,9 +163,23 @@ export default function CompaniesPage() {
     }
   };
 
-  const handleSelectCompany = (companyId: string, targetPath = "/dashboard") => {
-    setSelectedCompanyId(companyId);
-    router.push(targetPath);
+  const handleDeleteCompany = async () => {
+    if (!deletingCompany || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await companiesApi.deleteCompany(deletingCompany.id);
+      if (selectedCompanyId === deletingCompany.id) {
+        setSelectedCompanyId(companies.find((company) => company.id !== deletingCompany.id)?.id || "");
+      }
+      await refreshCompanies();
+      setSuccessMessage(`Company "${deletingCompany.name}" deleted successfully.`);
+      setDeletingCompany(null);
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Unable to delete company. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleStatusChange = async () => {
@@ -213,19 +261,18 @@ export default function CompaniesPage() {
               </h3>
             </div>
             <span className="text-xs text-[#6B7280]">
-              Active Workspace: <strong className="text-[#2E7D32]">{companies.find((c) => c.id === selectedCompanyId)?.name || selectedCompanyId}</strong>
+              Workspace: <strong className="text-[#2E7D32]">{companies.find((c) => c.id === selectedCompanyId)?.name || "Admin"}</strong>
             </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1240px] text-left text-xs">
+            <table className="w-full min-w-[900px] text-left text-xs">
               <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[#6B7280] uppercase tracking-wider font-semibold">
                 <tr>
                   <th className="px-6 py-3.5">Company Name</th>
-                  <th className="px-6 py-3.5">Tenant ID</th>
+                  <th className="px-6 py-3.5">Tenant Code</th>
                   <th className="px-6 py-3.5">Primary User Account</th>
                   <th className="px-6 py-3.5">Status</th>
-                  <th className="px-6 py-3.5 text-right">Workspace Navigation</th>
                   <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -247,6 +294,9 @@ export default function CompaniesPage() {
                           </div>
                           <div>
                             <span className="font-bold text-sm text-[#111827]">{comp.name}</span>
+                            <p className="text-[11px] font-normal text-[#6B7280] mt-1">
+                              Monthly limit: {comp.monthlyEmissionsLimit ? `${Number(comp.monthlyEmissionsLimit).toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e` : "Not configured"}
+                            </p>
                             {isActive && (
                               <span className="ml-2 text-[10px] bg-[#DCFCE7] text-[#16A34A] px-1.5 py-0.5 rounded-full font-bold">
                                 Current Active Org
@@ -256,7 +306,7 @@ export default function CompaniesPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 font-mono text-[#6B7280]">
-                        {comp.id}
+                        {comp.tenantCode || "?"}
                       </td>
                       <td className="px-6 py-4 text-[#374151]">
                         {comp.userEmail ? (
@@ -274,51 +324,33 @@ export default function CompaniesPage() {
                         </Badge>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant={isActive ? "primary" : "outline"}
-                            size="sm"
-                            onClick={() => handleSelectCompany(comp.id, "/dashboard")}
-                            leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
-                          >
-                            Dashboard
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSelectCompany(comp.id, "/emissions")}
-                            leftIcon={<Layers className="w-3.5 h-3.5" />}
-                          >
-                            Emissions
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSelectCompany(comp.id, "/reports")}
-                            leftIcon={<FileText className="w-3.5 h-3.5" />}
-                          >
-                            Reports
-                          </Button>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
                         <div className="relative inline-flex">
                           <button
                             type="button"
                             aria-label={`Actions for ${comp.name}`}
                             aria-expanded={openActionsCompanyId === comp.id}
-                            onClick={() =>
-                              setOpenActionsCompanyId((current) =>
-                                current === comp.id ? null : comp.id
-                              )
-                            }
+                            onClick={(event) => {
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              const above = window.innerHeight - rect.bottom < 184 && rect.top >= 184;
+                              actionsTriggerRef.current = event.currentTarget;
+                              setActionsPosition({
+                                top: above ? rect.top - 4 : rect.bottom + 4,
+                                right: Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - 184)),
+                                above,
+                              });
+                              setOpenActionsCompanyId((current) => current === comp.id ? null : comp.id);
+                            }}
                             className="p-2 rounded-lg text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827] cursor-pointer"
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
 
-                          {openActionsCompanyId === comp.id && (
-                            <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-[#E2E8E3] bg-white p-1.5 text-left shadow-lg">
+                          {openActionsCompanyId === comp.id && createPortal(
+                            <div
+                              ref={actionsMenuRef}
+                              style={{ top: actionsPosition.top, right: actionsPosition.right, transform: actionsPosition.above ? "translateY(-100%)" : undefined, maxHeight: actionsPosition.above ? actionsPosition.top - 8 : `calc(100dvh - ${actionsPosition.top + 8}px)` }}
+                              className="fixed z-50 w-44 overflow-y-auto rounded-xl border border-[#E2E8E3] bg-white p-1.5 text-left shadow-lg"
+                            >
                               <button
                                 type="button"
                                 onClick={() => {
@@ -356,7 +388,20 @@ export default function CompaniesPage() {
                                 <Power className="w-3.5 h-3.5" />
                                 {companyStatus === "Active" ? "Deactivate Company" : "Reactivate Company"}
                               </button>
-                            </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeletingCompany(comp);
+                                  setDeleteError(null);
+                                  setOpenActionsCompanyId(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[#B91C1C] hover:bg-[#FEF2F2] cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete Company
+                              </button>
+                            </div>,
+                            document.body
                           )}
                         </div>
                       </td>
@@ -409,6 +454,30 @@ export default function CompaniesPage() {
               isLoading={updatingStatus}
             >
               {statusCompany?.status === "Inactive" ? "Reactivate Company" : "Deactivate Company"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(deletingCompany)}
+        onClose={() => !deleting && setDeletingCompany(null)}
+        title="Delete Company"
+        subtitle="Permanently remove this company account."
+        maxWidth="sm"
+      >
+        <div className="space-y-5 pt-1">
+          <p className="text-sm text-[#4B5563]">
+            Delete <strong>{deletingCompany?.name}</strong>? This permanently removes its user accounts,
+            and emissions. Companies with financial or review history must be deactivated instead so their records are retained. This action cannot be undone.
+          </p>
+          {deleteError && <p role="alert" className="text-sm text-[#B91C1C]">{deleteError}</p>}
+          <div className="flex justify-end gap-2.5 border-t border-[#E2E8E3] pt-4">
+            <Button variant="outline" onClick={() => setDeletingCompany(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleDeleteCompany} isLoading={deleting} disabled={deleting}>
+              Delete Company
             </Button>
           </div>
         </div>

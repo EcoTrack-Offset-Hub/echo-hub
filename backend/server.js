@@ -1,3 +1,5 @@
+const { validateLimit } = require('./services/emissionsThreshold');
+const { decimal } = require('./services/precision');
 // Main Express API entry point for EcoTrack Hub.
 const express = require("express");
 const cors = require("cors");
@@ -6,6 +8,7 @@ const cors = require("cors");
 require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 
 const {
+  getDb,
   initDb,
   getAllEmissions,
   insertEmissionRecord,
@@ -21,6 +24,7 @@ const {
   updateCompany,
   resetCompanyUserPassword,
   setCompanyStatus,
+  deleteCompany,
   getEmissionById,
   updateEmissionRecord,
   deleteEmissionRecord,
@@ -30,11 +34,31 @@ const {
   getTransactions,
   getCompanyPortfolio,
 } = require("./config/db");
-const { calculateEmissions } = require("./services/calculationEngine");
+const { calculateEmissions: engineCalculate } = require("./services/calculationEngine");
+async function calculateEmissions(input) {
+ const db=await getDb();const {rows}=await db.query('SELECT * FROM emission_factor_versions WHERE category=$1 AND active',[input.category]);
+ if(!rows.length) throw new Error("No active factor for this category.");
+ const f=rows[0];return {...engineCalculate(input,{...f,factor:f.factor,unit:f.unit,methodology:f.methodology,defaultScope:f.default_scope,source:f.source_reference}),factorVersionId:f.id};
+}
 const { hashPassword, verifyPassword, signToken, requireAuth, requireAdmin } = require("./middleware/auth");
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
+
+// Permit local development plus the deployed frontend configured by the host.
+// FRONTEND_URL may contain one URL or a comma-separated allowlist.
+const allowedOrigins = new Set(
+  (process.env.FRONTEND_URL || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean)
+);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // Requests such as Render health checks have no Origin header.
+  const normalizedOrigin = origin.replace(/\/$/, "");
+  return /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(normalizedOrigin) || allowedOrigins.has(normalizedOrigin);
+}
 
 // Valid units accepted for each emissions category.
 const VALID_UNITS = {
@@ -50,7 +74,10 @@ const VALID_UNITS = {
 // Allow the local Next.js application to call this API.
 app.use(
   cors({
-    origin: /^http:\/\/localhost(:\d+)?$/,
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) return callback(null, true);
+      return callback(new Error("Origin is not allowed by CORS."));
+    },
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -90,6 +117,10 @@ function validateInput(body) {
   if (!Number.isFinite(consumption) || consumption <= 0) {
     errors.consumption = "Consumption must be a valid positive number.";
   }
+  try {
+    const amount = decimal(body.consumption);
+    if (amount.gt('999999999999') || amount.decimalPlaces() > 8) errors.consumption = 'Use up to 12 integer digits and 8 decimal places.';
+  } catch { errors.consumption = 'Consumption must be a valid positive decimal.'; }
   if (!body.category || !VALID_UNITS[body.category]) {
     errors.category = "A supported emission category is required.";
   }
@@ -98,6 +129,8 @@ function validateInput(body) {
   }
   if (!body.facility?.trim()) errors.facility = "Facility is required.";
   if (!body.reportingPeriod?.trim()) errors.reportingPeriod = "Reporting period is required.";
+  else if (!/^(Current Period|[1-9]\d{3}-(0[1-9]|1[0-2])|(?:January|February|March|April|May|June|July|August|September|October|November|December) [1-9]\d{3})$/.test(body.reportingPeriod.trim())) errors.reportingPeriod="Use YYYY-MM, Month YYYY, or Current Period.";
+  else if (!/^(Current Period|[1-9]\d{3}-(0[1-9]|1[0-2])|(?:January|February|March|April|May|June|July|August|September|October|November|December) [1-9]\d{3})$/.test(body.reportingPeriod.trim())) errors.reportingPeriod="Use YYYY-MM, Month YYYY, or Current Period.";
 
   return errors;
 }
@@ -114,19 +147,24 @@ function recordFromCalculation(calculation, companyId) {
     quantity: `${calculation.input} ${calculation.unit}`,
     emissions:
       calculation.resultTonnes >= 1
-        ? `${calculation.resultTonnes.toFixed(2)} tCO2e`
-        : `${calculation.resultKg.toFixed(2)} kg CO2e`,
-    status: "Verified",
+        ? `${calculation.resultTonnesExact || calculation.resultTonnes} tCO2e`
+        : `${calculation.resultKgExact || calculation.resultKg} kg CO2e`,
+    status: calculation.source.startsWith("Built-in") ? "Needs Review" : "Pending",
     facility: calculation.facility,
     conversionFactor: calculation.conversionFactor,
     inputUnit: calculation.unit,
     isNew: true,
+    calculationDetails: calculation,
   };
 }
 
+require("./services/scenarios").registerScenarios(app, { requireAuth, resolveCompany, getDb });
+require("./services/notifications")(app);
+
 // Public health check for Postman, deployment checks, and local testing.
-app.get(["/health", "/api/health"], (_req, res) => {
-  res.json({ status: "healthy", service: "ecotrack-backend", database: "postgresql" });
+app.get(["/health", "/api/health"], async (_req, res) => {
+  try { await (await getDb()).query("SELECT 1"); res.json({ status: "healthy", service: "ecotrack-backend", database: "postgresql" }); }
+  catch { res.status(503).json({status:"unavailable"}); }
 });
 
 // Login: verify credentials and return a signed access token.
@@ -160,14 +198,14 @@ app.post("/api/auth/login", async (req, res, next) => {
 });
 
 // Calculate an emission only; this route does not write to the database.
-app.post("/api/emissions/calculate", requireAuth, (req, res) => {
+app.post("/api/emissions/calculate", requireAuth, async (req, res) => {
   const errors = validateInput(req.body || {});
   if (Object.keys(errors).length) {
     return res.status(400).json({ success: false, error: "Validation error.", details: errors });
   }
 
   try {
-    return res.json({ success: true, data: calculateEmissions(req.body) });
+    return res.json({ success: true, data: await calculateEmissions(req.body) });
   } catch (_error) {
     return res.status(400).json({ success: false, error: "Unable to calculate emissions." });
   }
@@ -206,14 +244,17 @@ app.post("/api/emissions", requireAuth, async (req, res, next) => {
     }
 
     const input = req.body?.input !== undefined
-      ? { ...req.body, consumption: Number(String(req.body.input).replace(/,/g, "")) }
+      ? { ...req.body, consumption: String(req.body.input).replace(/,/g, "") }
       : req.body;
     const errors = validateInput(input || {});
     if (Object.keys(errors).length) {
       return res.status(400).json({ success: false, error: "Validation error.", details: errors });
     }
 
-    const calculation = calculateEmissions(input);
+    const calculation = await calculateEmissions(input);
+    if (input.factorVersionId && String(input.factorVersionId) !== String(calculation.factorVersionId)) {
+      return res.status(409).json({ success: false, error: "The emission factor changed after review. Recalculate and review before saving." });
+    }
     const record = recordFromCalculation(calculation, companyId);
     await insertEmissionRecord(record, calculation);
     return res.status(201).json({
@@ -249,14 +290,17 @@ app.put("/api/emissions/:id", requireAuth, async (req, res, next) => {
     }
 
     const input = req.body?.input !== undefined
-      ? { ...req.body, consumption: Number(String(req.body.input).replace(/,/g, "")) }
+      ? { ...req.body, consumption: String(req.body.input).replace(/,/g, "") }
       : req.body;
     const errors = validateInput(input || {});
     if (Object.keys(errors).length) {
       return res.status(400).json({ success: false, error: "Validation error.", details: errors });
     }
 
-    const calculation = calculateEmissions(input);
+    const calculation = await calculateEmissions(input);
+    if (input.factorVersionId && String(input.factorVersionId) !== String(calculation.factorVersionId)) {
+      return res.status(409).json({ success: false, error: "The emission factor changed after review. Recalculate and review before saving." });
+    }
     const updatedRecord = await updateEmissionRecord(req.params.id, req.user.companyId, calculation);
 
     return res.json({
@@ -431,6 +475,11 @@ app.put("/api/companies/:id", requireAuth, requireAdmin, async (req, res, next) 
     const email = req.body?.email !== undefined ? String(req.body.email).trim().toLowerCase() : undefined;
 
     const errors = {};
+    let monthlyEmissionsLimit;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'monthlyEmissionsLimit')) {
+      try { monthlyEmissionsLimit = validateLimit(req.body.monthlyEmissionsLimit); }
+      catch (e) { errors.monthlyEmissionsLimit = e.message; }
+    }
     if (name !== undefined && (!name || name.length < 2)) {
       errors.name = "Company name must be at least 2 characters.";
     }
@@ -447,7 +496,7 @@ app.put("/api/companies/:id", requireAuth, requireAdmin, async (req, res, next) 
       return res.status(404).json({ success: false, error: "Company not found." });
     }
 
-    const result = await updateCompany({ companyId, name, email });
+    const result = await updateCompany({ companyId, name, email, monthlyEmissionsLimit });
     return res.json({
       success: true,
       message: "Company account updated successfully.",
@@ -455,6 +504,7 @@ app.put("/api/companies/:id", requireAuth, requireAdmin, async (req, res, next) 
         id: result.company.id,
         name: result.company.name,
         status: result.company.status,
+        monthlyEmissionsLimit: result.company.monthlyEmissionsLimit,
         userEmail: result.user?.email,
       },
     });
@@ -465,6 +515,19 @@ app.put("/api/companies/:id", requireAuth, requireAdmin, async (req, res, next) 
     if (error.code === "DUPLICATE_NAME") {
       return res.status(409).json({ success: false, error: "A company with this name already exists." });
     }
+    return next(error);
+  }
+});
+
+// Permanently delete a company and its dependent records (Admin-only).
+app.delete("/api/companies/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!await deleteCompany(req.params.id)) {
+      return res.status(404).json({ success: false, error: "Company not found." });
+    }
+    return res.json({ success: true, data: { message: "Company deleted successfully." } });
+  } catch (error) {
+    if (error.code === "ARCHIVE_REQUIRED") return res.status(409).json({ success: false, error: error.message });
     return next(error);
   }
 });
@@ -573,7 +636,7 @@ app.get("/api/marketplace/projects/:id", async (req, res, next) => {
   }
 });
 
-// Atomic credit retirement and purchase.
+// Atomic credit purchase; retirement evidence is a separate administrative operation.
 // STRICT RBAC: Admins are FORBIDDEN from purchasing credits.
 app.post("/api/marketplace/purchase", requireAuth, async (req, res, next) => {
   try {
@@ -600,17 +663,17 @@ app.post("/api/marketplace/purchase", requireAuth, async (req, res, next) => {
     const result = await purchaseCredits({
       companyId: req.user.companyId,
       projectId,
-      quantityTCO2e: qty,
+      quantityTCO2e,
     });
 
     return res.status(200).json({
       success: true,
-      message: "Carbon credits retired and transaction registered.",
+      message: "Carbon credits purchased and transaction registered.",
       data: result,
     });
   } catch (error) {
     // If quantity exceeds available or validation error, return 422
-    if (error.message && (error.message.includes("exceeds available") || error.message.includes("Project not found") || error.message.includes("positive number"))) {
+    if (error.message && (error.message.includes("exceeds available") || error.message.includes("Project not found") || error.message.includes("positive number") || error.message.includes("not active"))) {
       return res.status(422).json({ success: false, error: error.message });
     }
     return next(error);
@@ -662,6 +725,8 @@ app.get("/api/marketplace/portfolio", requireAuth, async (req, res, next) => {
 });
 
 // Consistent fallback responses for unknown routes and unexpected errors.
+require("./services/adminRoutes")(app);
+
 app.use((_req, res) => res.status(404).json({ success: false, error: "Route not found." }));
 app.use((error, _req, res, _next) => {
   console.error("Backend error:", error.message);
@@ -672,7 +737,7 @@ app.use((error, _req, res, _next) => {
 async function start() {
   await initDb();
   const password = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
-  await seedUsers([
+  if (process.env.SEED_DEMO_USERS === "true") await seedUsers([
     { id: "usr-admin-david", email: "admin@ecotrack.test", passwordHash: hashPassword(password), role: "ADMIN", companyId: null },
     { id: "usr-company-a", email: "companya@ecotrack.test", passwordHash: hashPassword(password), role: "COMPANY_USER", companyId: "company-a" },
     { id: "usr-company-b", email: "companyb@ecotrack.test", passwordHash: hashPassword(password), role: "COMPANY_USER", companyId: "company-b" },

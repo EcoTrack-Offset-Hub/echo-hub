@@ -7,6 +7,12 @@ export interface RegisterCompanyResponse {
 }
 
 export const companiesApi = {
+  async deleteCompany(id: string): Promise<{ message: string }> {
+    return apiClient<{ message: string }>(`/api/companies/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  },
+
   /**
    * GET /api/companies
    * Retrieves all registered companies (Admin-only)
@@ -30,7 +36,7 @@ export const companiesApi = {
    * PUT /api/companies/:id
    * Updates company name and/or login email (Admin-only)
    */
-  async updateCompany(id: string, data: { name?: string; email?: string }): Promise<Company> {
+  async updateCompany(id: string, data: { name?: string; email?: string; monthlyEmissionsLimit?: string | null }): Promise<Company> {
     return apiClient<Company>(`/api/companies/${encodeURIComponent(id)}`, {
       method: "PUT",
       body: JSON.stringify(data),

@@ -39,15 +39,20 @@ export const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={project.name}
-      subtitle="Verified Carbon Offset Project Details"
+      subtitle="Carbon offset project details and certification evidence"
       maxWidth="lg"
     >
       <div className="space-y-4">
+        <div className="rounded-lg border p-3 text-sm space-y-2">
+          <p>Certification: {project.registryRef?.startsWith("DEMO-") ? "Demo only - not certified" : project.certificationReviewedAt ? "Evidence reviewed by administrator" : "Review pending"}</p>
+          <p>{project.certificationEvidence || "No certification evidence recorded."}</p>
+          {project.registryRef?.startsWith("DEMO-") ? <p>Registry URL is a placeholder. Purchases use sample inventory and do not transfer real carbon credits.</p> : project.registryUrl?.startsWith("https://") && <a href={project.registryUrl} target="_blank" rel="noopener noreferrer" className="text-green-700 underline">View public registry record</a>}
+        </div>
         {/* Sample Data / Demo Disclosure Banner */}
         <div className="p-3 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] flex items-start gap-2.5 text-xs text-[#166534]">
           <Info className="w-4 h-4 text-[#2E7D32] flex-shrink-0 mt-0.5" />
           <span>
-            <strong>Demo Marketplace:</strong> Projects, prices, certifications, and inventory shown are sample data for system demonstration.
+            Purchases are recorded in the EcoTrack ledger. Certification evidence is reviewed by an administrator; external registry transfers and retirement require separate evidence.
           </span>
         </div>
 
@@ -55,13 +60,13 @@ export const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
         <div className="relative h-52 w-full rounded-2xl overflow-hidden bg-[#F3F4F6] border border-[#E2E8E3]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={project.imageUrl}
+            src={project.imageUrl || "/project-placeholder.svg"}
             alt={project.name}
             className="w-full h-full object-cover"
             onError={(event) => {
               event.currentTarget.onerror = null;
               event.currentTarget.src =
-                "https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=800&auto=format&fit=crop&q=80";
+                "/project-placeholder.svg";
             }}
           />
           <div className="absolute top-3 right-3 flex items-center gap-2">
@@ -185,6 +190,7 @@ export const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
             <Button
               variant="primary"
               size="sm"
+              disabled={project.lifecycleStatus !== "Active" || !project.certificationReviewedAt || project.availableTCO2e <= 0}
               leftIcon={<Coins className="w-4 h-4" />}
               onClick={() => {
                 onClose();

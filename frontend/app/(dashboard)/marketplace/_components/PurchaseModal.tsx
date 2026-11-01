@@ -1,5 +1,6 @@
 "use client";
 
+import Decimal from "decimal.js";
 import React, { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -26,9 +27,9 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
   if (!project) return null;
 
-  const subtotal = Number((quantity * project.pricePerTonne).toFixed(2));
-  const serviceFee = Number((subtotal * 0.02).toFixed(2));
-  const total = Number((subtotal + serviceFee).toFixed(2));
+  const subtotal = new Decimal(quantity || 0).times(project.pricePerTonne).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+  const serviceFee = new Decimal(subtotal).times("0.02").toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+  const total = new Decimal(subtotal).plus(serviceFee).toNumber();
 
   const handleIncrement = () => {
     setErrorMessage(null);
@@ -42,6 +43,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
   const handleConfirmPurchase = async () => {
     setErrorMessage(null);
+    if (!Number.isFinite(quantity) || quantity <= 0 || new Decimal(quantity).decimalPlaces() > 2) { setErrorMessage("Enter a positive quantity with at most 2 decimal places."); return; }
     if (quantity > project.availableTCO2e) {
       setErrorMessage(
         `Requested ${quantity.toLocaleString()} tCO₂e exceeds currently available inventory of ${project.availableTCO2e.toLocaleString()} tCO₂e.`
@@ -66,7 +68,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Purchase Carbon Credits"
-      subtitle="Retire verified carbon offsets directly into your corporate registry"
+      subtitle="Purchase carbon credits for your corporate portfolio"
       maxWidth="md"
     >
       <div className="space-y-4">
@@ -96,7 +98,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
         {/* Quantity Selector */}
         <div className="space-y-2">
           <label htmlFor="purchase-qty-input" className="block text-xs font-semibold text-[#374151]">
-            Select Quantity (tCO₂e to retire)
+            Select Quantity (tCO₂e to purchase)
           </label>
           <div className="flex items-center gap-3">
             <button
@@ -111,12 +113,12 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
             <input
               id="purchase-qty-input"
               type="number"
-              min="1"
+              min="0.01" step="0.01"
               max={project.availableTCO2e}
               value={quantity}
               onChange={(e) => {
                 setErrorMessage(null);
-                setQuantity(Math.max(1, parseInt(e.target.value) || 1));
+                setQuantity(Number(e.target.value));
               }}
               className="flex-1 py-2 px-3 rounded-xl border border-[#E2E8E3] text-center font-extrabold text-base text-[#111827]"
             />
@@ -154,7 +156,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
         {/* Audit note */}
         <div className="p-2.5 rounded-lg bg-[#E8F5E9] border border-[#C8E6C9] flex items-center gap-2 text-[11px] text-[#166534]">
           <ShieldCheck className="w-4 h-4 text-[#2E7D32] flex-shrink-0" />
-          <span>Credits are permanently serialized and retired with an auditable certificate.</span>
+          <span>Purchases are recorded in the ledger. Retirement requires separate registry evidence.</span>
         </div>
 
         {/* Actions */}

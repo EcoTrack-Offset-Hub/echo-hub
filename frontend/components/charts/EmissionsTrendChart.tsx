@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useId, useState } from "react";
 import { cn } from "@/lib/utils/cn";
 import { BarChart3 } from "lucide-react";
 
@@ -28,10 +28,13 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
   hasEnoughData = true,
   emptyMessage = "Add activity data for another reporting period to view an emissions trend.",
 }) => {
+  const [activePeriod, setActivePeriod] = useState<string | null>(null);
+  const tooltipId = useId();
   // Check if we actually have enough data to draw a trend line
   const validPoints = data.filter((d) => Number.isFinite(d.emissions));
   const distinctNonZero = validPoints.filter((d) => d.emissions > 0).length;
   const showEmpty = !hasEnoughData || validPoints.length < 2 || (validPoints.length > 0 && distinctNonZero < 1);
+  const activePoint = validPoints.find(point => point.period === activePeriod);
 
   // SVG dimensions
   const width = 640;
@@ -76,6 +79,8 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
 
   return (
     <div
+      role="region"
+      aria-label="Emissions Trend"
       className={cn(
         "bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between",
         className
@@ -94,6 +99,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
             <button
               key={p}
               type="button"
+              aria-pressed={range === p}
               onClick={() => onRangeChange(p)}
               className={cn(
                 "px-2.5 py-1 rounded-md transition-all cursor-pointer",
@@ -118,7 +124,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
           <p className="text-xs text-[#6B7280] max-w-xs">{emptyMessage}</p>
         </div>
       ) : (
-        <div className="w-full pt-4 overflow-hidden">
+        <div className="relative w-full pt-4" onMouseLeave={() => setActivePeriod(null)}>
           <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
             <defs>
               <linearGradient id="trendAreaGradient" x1="0" y1="0" x2="0" y2="1">
@@ -177,18 +183,33 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
               const year = d.month.split(" ")[1] || "";
 
               return (
-                <g key={d.period} className="group cursor-pointer">
+                <g
+                  key={d.period}
+                  role="button"
+                  tabIndex={0}
+                  data-period={d.period}
+                  aria-label={`${d.month}: ${d.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`}
+                  aria-describedby={activePeriod === d.period ? tooltipId : undefined}
+                  onMouseEnter={() => setActivePeriod(d.period)}
+                  onFocus={() => setActivePeriod(d.period)}
+                  onBlur={() => setActivePeriod(null)}
+                  onKeyDown={event => {
+                    if (event.key === "Escape") setActivePeriod(null);
+                    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setActivePeriod(d.period); }
+                  }}
+                  className="cursor-pointer outline-none"
+                >
                   <circle
                     cx={cx}
                     cy={cy}
-                    r="4"
+                    r={activePeriod === d.period ? 6 : 4}
                     fill="#FFFFFF"
                     stroke="#2E7D32"
                     strokeWidth="2.5"
-                    className="transition-transform group-hover:scale-125"
+                    className="transition-[r]"
                   />
                   {/* Tooltip on hover */}
-                  <title>{`${d.month}: ${d.emissions.toFixed(3)} tCO₂e`}</title>
+                  <title>{`${d.month}: ${d.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`}</title>
 
                   {/* X Axis Label */}
                   <text
@@ -205,6 +226,21 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
               );
             })}
           </svg>
+          {activePoint && (
+            <div
+              id={tooltipId}
+              role="tooltip"
+              className="pointer-events-none absolute z-10 rounded-lg border border-green-200 bg-white px-3 py-2 text-xs text-[#111827] shadow-md"
+              style={{
+                left: `${Math.max(18, Math.min(82, getX(validPoints.indexOf(activePoint)) / width * 100))}%`,
+                top: `${Math.max(20, getY(activePoint.emissions) / height * 100)}%`,
+                transform: "translate(-50%, -100%)",
+              }}
+            >
+              <p className="font-semibold">{activePoint.month}</p>
+              <p>{activePoint.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e</p>
+            </div>
+          )}
         </div>
       )}
     </div>

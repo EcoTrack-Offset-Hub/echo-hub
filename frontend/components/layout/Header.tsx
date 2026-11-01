@@ -1,4 +1,5 @@
 "use client";
+import {useRouter} from "next/navigation";
 import React, { useState } from "react";
 import { Bell, HelpCircle, ChevronDown, Menu, Building2 } from "lucide-react";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
@@ -7,13 +8,17 @@ interface HeaderProps {
   title: string;
   subtitle: string;
   onOpenMobileMenu?: () => void;
+  companyFilter?: React.ReactNode;
 }
 
-export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMenu }) => {
+export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMenu, companyFilter }) => {
+  const router=useRouter();
+  const [profileOpen, setProfileOpen] = useState(false);
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const { user, selectedCompanyId, setSelectedCompanyId, companies } = useAuthSession();
 
   const getCompanyName = (id: string) => {
+    if (!id) return "Admin Dashboard";
     const match = companies.find((c) => c.id === id);
     if (match) return match.name;
     if (id === "company-a") return "Company A";
@@ -25,20 +30,14 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMen
   const label = user.role === "ADMIN" ? "Admin" : getCompanyName(selectedCompanyId);
 
   // List of companies for Admin switcher (use dynamic list or fallback)
-  const displayCompanies =
-    companies.length > 0
-      ? companies
-      : [
-          { id: "company-a", name: "Company A" },
-          { id: "company-b", name: "Company B" },
-        ];
+  const displayCompanies = companies;
 
   return (
     <header className="sticky top-0 z-20 h-16 bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-8">
       <div className="flex items-center gap-3">
-        {onOpenMobileMenu && (
+        {(
           <button
-            onClick={onOpenMobileMenu}
+            onClick={onOpenMobileMenu || (()=>window.dispatchEvent(new Event("eco-open-sidebar")))}
             className="lg:hidden p-2 text-[#4B5563] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-lg"
             aria-label="Open sidebar menu"
           >
@@ -51,13 +50,13 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMen
         </div>
       </div>
       <div className="flex items-center gap-3 sm:gap-4">
-        <div className="relative">
-          {user.role === "ADMIN" ? (
+        {user.role === "ADMIN" && <div className="relative">
+          {companyFilter || (
             <>
               <button
                 onClick={() => setOrgMenuOpen(!orgMenuOpen)}
                 aria-expanded={orgMenuOpen}
-                aria-label="Select company workspace"
+                aria-label="Select dashboard or company workspace"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E2E8E3] bg-[#F9FAFB] hover:bg-[#F3F4F6] text-xs font-semibold text-[#111827] transition-colors cursor-pointer"
               >
                 <Building2 className="w-3.5 h-3.5 text-[#2E7D32]" />
@@ -69,15 +68,27 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMen
                 <div className="absolute right-0 mt-1.5 w-60 rounded-xl bg-white border border-[#E2E8E3] shadow-lg py-1.5 z-40 max-h-72 overflow-y-auto">
                   <div className="px-3 py-1.5 border-b border-[#F3F4F6]">
                     <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">
-                      Select Tenant Workspace
+                      Select Workspace
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCompanyId("");
+                      setOrgMenuOpen(false);
+                      router.push("/dashboard");
+                    }}
+                    className="w-full text-left px-3.5 py-2 text-xs hover:bg-[#E8F5E9] text-[#111827] font-semibold border-b border-[#F3F4F6]"
+                  >
+                    Admin Dashboard (All Companies)
+                  </button>
                   {displayCompanies.map((c) => (
                     <button
                       key={c.id}
                       onClick={() => {
                         setSelectedCompanyId(c.id);
                         setOrgMenuOpen(false);
+                        router.push("/dashboard");
                       }}
                       className="w-full text-left px-3.5 py-2 text-xs hover:bg-[#E8F5E9] flex items-center justify-between text-[#111827] font-medium"
                     >
@@ -92,33 +103,31 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMen
                 </div>
               )}
             </>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E2E8E3] bg-[#F9FAFB] text-xs font-semibold text-[#111827]">
-              <Building2 className="w-3.5 h-3.5 text-[#2E7D32]" />
-              <span className="hidden md:inline text-[#6B7280]">Org:</span>
-              <span>{label}</span>
-            </div>
           )}
-        </div>
+        </div>}
         <button
+          onClick={() => router.push("/notifications")}
           aria-label="View notifications"
           className="p-2 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer"
         >
           <Bell className="w-4.5 h-4.5" />
         </button>
-        <button
+        {user.role === "ADMIN" && <button
+          onClick={() => router.push("/help")}
           aria-label="Help and documentation"
-          className="p-2 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer hidden sm:flex"
+          title="Administrator guide"
+          className="p-2 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer flex"
         >
           <HelpCircle className="w-4.5 h-4.5" />
-        </button>
+        </button>}
         <div
           className="flex items-center gap-2 pl-2 border-l border-[#E5E7EB]"
           title={`${user.email} — ${label}`}
         >
-          <div className="w-8 h-8 rounded-full bg-[#E8F5E9] flex items-center justify-center text-xs font-bold text-[#2E7D32] border border-[#C8E6C9]">
+          <button aria-label="Admin profile menu" onClick={()=>setProfileOpen(!profileOpen)} className="w-8 h-8 rounded-full bg-[#E8F5E9] flex items-center justify-center text-xs font-bold text-[#2E7D32] border border-[#C8E6C9]">
             {initial}
-          </div>
+          </button>
+          {profileOpen && <div className="absolute right-4 top-14 bg-white p-4 rounded-xl border shadow-lg text-xs"><p>{user.email}</p><a href="/settings" className="block mt-3 text-green-700">Account settings</a></div>}
         </div>
       </div>
     </header>

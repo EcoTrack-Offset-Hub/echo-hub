@@ -1,3 +1,5 @@
+import { getAuthToken } from "@/lib/auth/session";
+
 // Standard response envelope returned by the Express backend.
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -54,7 +56,7 @@ export async function apiClient<T>(
   headers.set("Accept", "application/json");
   // Browser requests carry the login token saved after successful authentication.
   if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem("ecotrack_auth_token");
+    const token = getAuthToken();
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 

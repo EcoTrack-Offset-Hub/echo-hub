@@ -102,6 +102,14 @@ export interface OffsetsData {
 }
 
 export interface CompanyDashboardData {
+  emissionsThreshold: {
+    limitTonnes: string | null;
+    warningAtPercent: number;
+    alertAtPercent: number;
+    usedPercent: number | null;
+    remainingTonnes: string | null;
+    status: "not_configured" | "select_month" | "normal" | "warning" | "exceeded";
+  };
   company: {
     id: string;
     name: string;

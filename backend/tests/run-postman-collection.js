@@ -1,17 +1,3 @@
-/**
- * Faithful Postman Collection v2.1 Runner for EcoTrack Hub API Audit.
- *
- * Why a compatible Node.js runner is used:
- * Neither `newman` nor the `postman` CLI is installed in this environment.
- * This runner loads `postman/EcoTrack-Hub-Audit.postman_collection.json` and
- * `postman/EcoTrack-Hub-Audit.postman_environment.template.json` directly,
- * resolves `{{variable}}` and `{{$timestamp}}` placeholders in collection order,
- * executes every HTTP request against the live Express server connected to the
- * configured development PostgreSQL database, runs each request's `pm.test(...)`
- * script in a sandboxed `pm` runtime, and safely cleans up only the exact record
- * IDs created during the run while restoring `proj-001` inventory to its exact
- * pre-run baseline.
- */
 
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const fs = require("fs");

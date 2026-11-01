@@ -1,4 +1,4 @@
-// Browser-only helpers for the signed-in user and token stored after login.
+// Keep authentication scoped to this tab so other tabs can use different accounts.
 import { AuthenticatedUser, UserRole } from "@/types";
 
 const TOKEN_KEY = "ecotrack_auth_token";
@@ -20,14 +20,14 @@ function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
 // Read the Bearer token safely; server rendering has no browser storage.
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  const token = window.localStorage.getItem(TOKEN_KEY);
+  const token = window.sessionStorage.getItem(TOKEN_KEY);
   return token && token.trim() ? token : null;
 }
 
-// Read and validate the stored user so malformed local storage cannot crash the UI.
+// Read and validate the stored user so malformed session storage cannot crash the UI.
 export function getAuthenticatedUser(): AuthenticatedUser | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(USER_KEY);
+  const raw = window.sessionStorage.getItem(USER_KEY);
   if (!raw) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -56,7 +56,7 @@ export function isCompanyUser(): boolean {
 // Remove all session-related browser data during logout.
 export function logout(): void {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(TOKEN_KEY);
-  window.localStorage.removeItem(USER_KEY);
-  window.localStorage.removeItem("ecotrack_selected_company_id");
+  window.sessionStorage.removeItem(TOKEN_KEY);
+  window.sessionStorage.removeItem(USER_KEY);
+  window.sessionStorage.removeItem("ecotrack_selected_company_id");
 }
