@@ -1,3 +1,4 @@
+const { decimal } = require('./precision');
 // Authoritative emission factors used by the backend calculation endpoint.
 const SERVER_EMISSION_FACTORS = {
   "Purchased Electricity": {
@@ -80,37 +81,53 @@ function normalizeCategory(catStr) {
 }
 
 // Convert validated activity data into kg and tonnes CO2e plus audit details.
-function calculateEmissions(input) {
+function calculateEmissions(input, factorMetadata) {
   const category = normalizeCategory(input.category);
-  const meta = SERVER_EMISSION_FACTORS[category] || SERVER_EMISSION_FACTORS["Other"];
-  const consumptionNum = Number(input.consumption);
-
-  if (isNaN(consumptionNum) || consumptionNum <= 0) {
-    throw new Error("Consumption must be a valid positive number.");
+  const meta = factorMetadata || SERVER_EMISSION_FACTORS[category] || SERVER_EMISSION_FACTORS["Other"];
+  const amount = decimal(input.consumption);
+  if (amount.lte(0) || amount.gt('999999999999') || amount.decimalPlaces() > 8) {
+    throw new Error("Consumption must be positive, at most 999999999999, with up to 8 decimal places.");
   }
-
-  const factor = meta.factor;
-  const resultKg = Number((consumptionNum * factor).toFixed(2));
-  const resultTonnes = Number((resultKg / 1000).toFixed(3));
-
-  const formattedInput = consumptionNum.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  const unit = input.unit ? String(input.unit).trim() : meta.unit.split("/")[1] || "unit";
+  const baseUnit = SERVER_EMISSION_FACTORS[category].unit.split("/")[1];
+  const units = {
+    "Purchased Electricity": { kWh: 1, MWh: 1000 },
+    "Fleet & Fuel": { L: 1, liters: 1 },
+    Facilities: { m3: 1, "m\u00b3": 1 },
+    "Business Travel": { "passenger-km": 1 },
+    "Purchased Goods": { tons: 1, tonnes: 1 },
+    "Logistics & Freight": { shipments: 1 },
+    Other: { unit: 1, units: 1 },
+  };
+  const unit = String(input.unit || baseUnit).trim();
+  const multiplier = units[category][unit];
+  if (multiplier === undefined) throw new Error("The unit is not valid for this category.");
+  const factor = decimal(meta.factor);
+  const normalized = amount.times(multiplier);
+  const kg = normalized.times(factor).toDecimalPlaces(8);
+  if (kg.gte("1e24")) throw new Error("Calculated emissions exceed the supported range.");
+  const resultKg = kg.toNumber();
+  const resultTonnes = kg.div(1000).toNumber();
+  const formattedInput = amount.toFixed();
   const facility = input.facility ? String(input.facility).trim() : "Main Facility";
   const reportingPeriod = input.reportingPeriod ? String(input.reportingPeriod).trim() : "Current Period";
-  const scope = input.scope || meta.defaultScope;
+  const scope = meta.defaultScope || SERVER_EMISSION_FACTORS[category].defaultScope;
   const activity = input.activity || `${facility} ${category}`;
 
-  const formula = `${formattedInput} ${unit} × ${factor} ${meta.unit} = ${resultKg.toLocaleString("en-US", { minimumFractionDigits: 2 })} kg CO₂e`;
+  const formula = `${formattedInput} ${unit} * ${multiplier} ${baseUnit}/${unit} * ${factor.toFixed()} ${meta.unit} = ${kg.toFixed()} kg CO2e`;
 
   return {
     input: formattedInput,
     unit,
-    conversionFactor: factor,
+    conversionFactor: factor.toNumber(),
+    factorUnit: meta.unit,
+    normalizedInput: normalized.toFixed(),
+    normalizedUnit: baseUnit,
+    assumptions: meta.assumptions || "Category-average intensity; purchased goods uses metric tonnes. Results are estimates, not independently verified emissions.",
+    source: meta.source || "Built-in illustrative factor; replace with an approved regional/source-specific factor before compliance reporting.",
+    factorVersionId: meta.id || null,
     formula,
+    resultKgExact: kg.toFixed(),
+    resultTonnesExact: kg.div(1000).toFixed(),
     resultKg,
     resultTonnes,
     methodology: meta.methodology,

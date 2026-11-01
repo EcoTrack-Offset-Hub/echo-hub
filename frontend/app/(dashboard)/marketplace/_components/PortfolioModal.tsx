@@ -73,9 +73,9 @@ const PortfolioContent: React.FC<PortfolioContentProps> = ({ companyId, onClose 
           <div className="w-12 h-12 mx-auto rounded-full bg-[#E8F5E9] text-[#2E7D32] flex items-center justify-center">
             <Inbox className="w-6 h-6" />
           </div>
-          <h4 className="text-sm font-bold text-[#111827]">No Offsets Retired Yet</h4>
+          <h4 className="text-sm font-bold text-[#111827]">No Carbon Credit Purchases Yet</h4>
           <p className="text-xs text-[#5F6B61] max-w-sm mx-auto">
-            Retire carbon credits from the verified marketplace to build your organization&apos;s verified offset portfolio.
+            Purchase carbon credits from the marketplace to build your organization&apos;s offset portfolio.
           </p>
         </div>
       ) : (
@@ -106,7 +106,7 @@ const PortfolioContent: React.FC<PortfolioContentProps> = ({ companyId, onClose 
             <div className="p-3.5 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB]">
               <span className="text-[11px] font-semibold text-[#4B5563] flex items-center gap-1">
                 <FileCheck className="w-3.5 h-3.5 text-[#2E7D32]" />
-                Retirements
+                Purchases
               </span>
               <p className="text-lg font-black text-[#111827] mt-1">
                 {data.transactionCount}
@@ -133,8 +133,8 @@ const PortfolioContent: React.FC<PortfolioContentProps> = ({ companyId, onClose 
 
             <div className="space-y-2.5">
               {data.breakdown.map((item) => {
-                const pct = data.totalCreditsRetired > 0
-                  ? ((item.credits / data.totalCreditsRetired) * 100).toFixed(1)
+                const pct = data.totalCreditsPurchased > 0
+                  ? ((item.credits / data.totalCreditsPurchased) * 100).toFixed(1)
                   : "0.0";
                 return (
                   <div key={item.projectType} className="space-y-1">
@@ -178,7 +178,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="My Offset Portfolio"
-      subtitle="Corporate carbon retirement portfolio & impact summary"
+      subtitle="Corporate carbon credit portfolio and documented retirements"
       maxWidth="lg"
     >
       {isOpen && (

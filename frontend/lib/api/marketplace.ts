@@ -26,6 +26,7 @@ export interface PortfolioBreakdownItem {
 
 export interface PortfolioData {
   totalCreditsRetired: number;
+  totalCreditsPurchased: number;
   totalInvested: number;
   transactionCount: number;
   projectsSupportedCount: number;
@@ -54,7 +55,7 @@ export const marketplaceApi = {
 
   /**
    * POST /api/marketplace/purchase
-   * Retires credits and validates inventory on Express + PostgreSQL backend
+   * Purchases credits and validates inventory on Express + PostgreSQL backend
    */
   async purchaseCredits(projectId: string, quantityTCO2e: number): Promise<PurchaseOrder> {
     const res = await apiClient<PurchaseResult>("/api/marketplace/purchase", {

@@ -65,6 +65,10 @@ async function runTests() {
   let startingTxCount;
   let startingInventory;
   const createdTransactionIds = [];
+  const testProjectId='market-test-'+Date.now();
+  const dbFixture=await getDb();
+  const beforePortfolio=(await dbFixture.query(`SELECT COALESCE(sum(r.quantity),0)::float8 AS retired FROM credit_retirements r JOIN transactions t ON t.id=r.transaction_id WHERE t.company_id='company-a'`)).rows[0].retired;
+  await dbFixture.query(`INSERT INTO offset_projects(id,name,location,country,type,standard,description,price_per_tonne,available_tco2e,vintage,registry_ref,lifecycle_status,registry_url,certification_evidence,certification_reviewed_at) VALUES($1,'Marketplace test project','PH','PH','Renewable Energy','Gold Standard','Test-owned project',14.5,1000,'2024','TEST-REG','Active','https://registry.example/test','Isolated test evidence',now())`,[testProjectId]);
 
   try {
     // Authenticate Admin and Company Users
@@ -81,7 +85,7 @@ async function runTests() {
     const txInitRes = await request("GET", "/api/transactions", { Authorization: `Bearer ${compAToken}` });
     startingTxCount = txInitRes.body.data.transactions.length;
 
-    const projInitRes = await request("GET", "/api/marketplace/projects/proj-001");
+    const projInitRes = await request("GET", `/api/marketplace/projects/${testProjectId}`);
     startingInventory = projInitRes.body.data.availableTCO2e;
 
     // Test 1: GET /api/marketplace/projects returns 6 demo projects
@@ -89,10 +93,10 @@ async function runTests() {
       const res = await request("GET", "/api/marketplace/projects");
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.body.success, true);
-      assert.strictEqual(res.body.data.projects.length, 6);
-      assert.strictEqual(res.body.data.stats.verifiedProjectsCount, 6);
+      assert.strictEqual(res.body.data.projects.length, (await dbFixture.query("SELECT count(*)::int AS count FROM offset_projects")).rows[0].count);
+      assert.strictEqual(res.body.data.stats.verifiedProjectsCount, res.body.data.projects.length);
       assert(res.body.data.stats.availableCreditsTCO2e > 0);
-      console.log(`[PASS] 1: Catalog returns all 6 PostgreSQL-backed demo projects (Count: ${res.body.data.projects.length}, Stats count: ${res.body.data.stats.verifiedProjectsCount})`);
+      console.log(`[PASS] 1: Catalog returns PostgreSQL-backed projects (Count: ${res.body.data.projects.length}, Stats count: ${res.body.data.stats.verifiedProjectsCount})`);
       passed++;
     }
 
@@ -100,8 +104,8 @@ async function runTests() {
     {
       const res = await request("GET", "/api/marketplace/projects?category=Renewable%20Energy");
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.body.data.projects.length, 1);
-      assert.strictEqual(res.body.data.projects[0].name, "Solar Energy Transition");
+      assert.strictEqual(res.body.data.projects.length,(await dbFixture.query("SELECT count(*)::int AS count FROM offset_projects WHERE type='Renewable Energy'")).rows[0].count);
+      assert(res.body.data.projects.some(p=>p.id===testProjectId));
       console.log("[PASS] 2: Category filtering works correctly");
       passed++;
     }
@@ -110,18 +114,18 @@ async function runTests() {
     {
       const res = await request("GET", "/api/marketplace/projects?standard=Gold%20Standard");
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.body.data.projects.length, 2);
+      assert.strictEqual(res.body.data.projects.length,(await dbFixture.query("SELECT count(*)::int AS count FROM offset_projects WHERE standard='Gold Standard'")).rows[0].count);
       console.log("[PASS] 3: Certification standard filtering works correctly");
       passed++;
     }
 
     // Test 4: Single project details
     {
-      const res = await request("GET", "/api/marketplace/projects/proj-001");
+      const res = await request("GET", `/api/marketplace/projects/${testProjectId}`);
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.body.data.name, "Amazonia Reforestation Initiative");
+      assert.strictEqual(res.body.data.name, "Marketplace test project");
       assert.strictEqual(res.body.data.vintage, "2024");
-      assert.strictEqual(res.body.data.registryRef, "VCS-1842");
+      assert.strictEqual(res.body.data.registryRef, "TEST-REG");
       console.log("[PASS] 4: Single project detail returns vintage and registryRef");
       passed++;
     }
@@ -132,7 +136,7 @@ async function runTests() {
         "POST",
         "/api/marketplace/purchase",
         { Authorization: `Bearer ${adminToken}` },
-        { projectId: "proj-001", quantityTCO2e: 100 }
+        { projectId: testProjectId, quantityTCO2e: 100 }
       );
       assert.strictEqual(res.status, 403);
       assert.strictEqual(res.body.success, false);
@@ -147,7 +151,7 @@ async function runTests() {
         "POST",
         "/api/marketplace/purchase",
         { Authorization: `Bearer ${compAToken}` },
-        { projectId: "proj-001", quantityTCO2e: 0 }
+        { projectId: testProjectId, quantityTCO2e: 0 }
       );
       assert.strictEqual(res.status, 422);
       assert.strictEqual(res.body.success, false);
@@ -159,14 +163,14 @@ async function runTests() {
     let initialInventory;
     let purchasedTxId;
     {
-      const projBefore = await request("GET", "/api/marketplace/projects/proj-001");
+      const projBefore = await request("GET", `/api/marketplace/projects/${testProjectId}`);
       initialInventory = projBefore.body.data.availableTCO2e;
 
       const res = await request(
         "POST",
         "/api/marketplace/purchase",
         { Authorization: `Bearer ${compAToken}` },
-        { projectId: "proj-001", quantityTCO2e: 50 }
+        { projectId: testProjectId, quantityTCO2e: 50 }
       );
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.body.success, true);
@@ -182,7 +186,7 @@ async function runTests() {
       }
 
       // Verify PostgreSQL decremented inventory
-      const projAfter = await request("GET", "/api/marketplace/projects/proj-001");
+      const projAfter = await request("GET", `/api/marketplace/projects/${testProjectId}`);
       assert.strictEqual(projAfter.body.data.availableTCO2e, initialInventory - 50);
       console.log(`[PASS] 7: Company A purchased credits; inventory decremented from ${initialInventory} to ${projAfter.body.data.availableTCO2e}`);
       passed++;
@@ -194,7 +198,7 @@ async function runTests() {
         "POST",
         "/api/marketplace/purchase",
         { Authorization: `Bearer ${compAToken}` },
-        { projectId: "proj-001", quantityTCO2e: initialInventory + 1000 }
+        { projectId: testProjectId, quantityTCO2e: initialInventory + 1000 }
       );
       assert.strictEqual(res.status, 422);
       assert.strictEqual(res.body.success, false);
@@ -209,7 +213,7 @@ async function runTests() {
       const resA = await request("GET", "/api/transactions", { Authorization: `Bearer ${compAToken}` });
       assert.strictEqual(resA.status, 200);
       assert(resA.body.data.transactions.length >= 1);
-      const hasPurchasedTxn = resA.body.data.transactions.some((t) => t.id === purchasedTxId && t.project === "Amazonia Reforestation Initiative");
+      const hasPurchasedTxn = resA.body.data.transactions.some((t) => t.id === purchasedTxId && t.project === "Marketplace test project");
       assert(hasPurchasedTxn);
 
       // Company B does NOT see Company A's transaction
@@ -240,7 +244,8 @@ async function runTests() {
       const res = await request("GET", "/api/marketplace/portfolio", { Authorization: `Bearer ${compAToken}` });
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.body.success, true);
-      assert(res.body.data.totalCreditsRetired >= 50);
+      assert(res.body.data.totalCreditsPurchased >= 50);
+      assert.strictEqual(res.body.data.totalCreditsRetired,beforePortfolio);
       assert(res.body.data.totalInvested >= 739.5);
       assert(res.body.data.transactionCount >= 1);
       assert(res.body.data.projectsSupportedCount >= 1);
@@ -291,7 +296,7 @@ async function runTests() {
         await db.query("DELETE FROM transactions WHERE id = ANY($1)", [createdTransactionIds]);
       }
       if (startingInventory !== undefined) {
-        await db.query("UPDATE offset_projects SET available_tco2e = $1 WHERE id = 'proj-001'", [startingInventory]);
+        await db.query("UPDATE offset_projects SET available_tco2e = $1 WHERE id = $2", [startingInventory,testProjectId]);
       }
 
       // Assert transaction count returned to starting baseline
@@ -307,13 +312,14 @@ async function runTests() {
 
       // Assert project inventory returned exactly to starting baseline
       if (startingInventory !== undefined) {
-        const projFinal = await request("GET", "/api/marketplace/projects/proj-001");
+        const projFinal = await request("GET", `/api/marketplace/projects/${testProjectId}`);
         assert.strictEqual(
           projFinal.body.data.availableTCO2e,
           startingInventory,
           `Pollution failure: inventory was ${startingInventory}, but remained ${projFinal.body.data.availableTCO2e} after cleanup`
         );
       }
+      await dbFixture.query("DELETE FROM offset_projects WHERE id=$1",[testProjectId]);
       console.log("[CLEANUP] Marketplace & transactions test state cleanly restored (zero pollution verified).");
     } catch (cleanupErr) {
       console.error("[CLEANUP FAILURE] Anti-pollution assertion failed:", cleanupErr.message);

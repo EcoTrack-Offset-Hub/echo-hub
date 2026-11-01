@@ -1,259 +1,138 @@
-require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
-const http = require("http");
+// Live PostgreSQL regression tests with test-owned tenants, independent of historical demo fixtures.
+require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+const assert = require("node:assert/strict");
+const { randomUUID } = require("crypto");
 const { app } = require("../server");
-const { initDb, getDb, getDashboardData, seedUsers } = require("../config/db");
-const { hashPassword } = require("../middleware/auth");
-
-async function request(serverUrl, path, options = {}) {
-  const url = `${serverUrl}${path}`;
-  const response = await fetch(url, {
-    method: options.method || "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
-      ...(options.headers || {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
-  }
-
-  return { status: response.status, data };
-}
-
-async function runDashboardTests() {
-  console.log("=== Starting EcoTrack Company Dashboard Verification Tests ===");
+const { initDb, getDb, getDashboardData } = require("../config/db");
+const { signToken } = require("../middleware/auth");
+async function run() {
   await initDb();
-  const initialPassword = process.env.SEED_PASSWORD || "EcoTrackDemo!2026";
-  await seedUsers([
-    { id: "usr-admin-david", email: "admin@ecotrack.test", passwordHash: hashPassword(initialPassword), role: "ADMIN", companyId: null },
-    { id: "usr-company-a", email: "companya@ecotrack.test", passwordHash: hashPassword(initialPassword), role: "COMPANY_USER", companyId: "company-a" },
-    { id: "usr-company-b", email: "companyb@ecotrack.test", passwordHash: hashPassword(initialPassword), role: "COMPANY_USER", companyId: "company-b" },
-  ]);
-
-  const server = http.createServer(app);
-  await new Promise((resolve) => server.listen(0, resolve));
-  const port = server.address().port;
-  const baseUrl = `http://localhost:${port}`;
-
-  const results = [];
-  const recordResult = (id, description, passed, detail = "") => {
-    results.push({ id, description, passed, detail });
-    console.log(`[${passed ? "PASS" : "FAIL"}] ${id}: ${description} ${detail ? `(${detail})` : ""}`);
-  };
-
   const db = await getDb();
-  let tempIncompleteId = null;
-
+  const a = "dash-" + randomUUID(),
+    b = "dash-" + randomUUID();
+  const current = new Date();
+  current.setUTCDate(1);
+  const month = current.toISOString().slice(0, 7);
+  const previous = new Date(current);
+  previous.setUTCMonth(previous.getUTCMonth() - 1);
+  const prev = previous.toISOString().slice(0, 7);
+  const older = new Date(current);
+  older.setUTCMonth(older.getUTCMonth() - 2);
+  const old = older.toISOString().slice(0, 7);
+  const server = app.listen(0);
+  await new Promise((r) => server.once("listening", r));
+  const base = "http://localhost:" + server.address().port;
+  const token = (id) =>
+    signToken({
+      id: "dashboard-test",
+      email: "dashboard@test.example",
+      role: "COMPANY_USER",
+      companyId: id,
+    });
+  const get = async (path, auth = token(a)) => {
+    const r = await fetch(base + path, {
+      headers: auth ? { Authorization: "Bearer " + auth } : {},
+    });
+    return { status: r.status, data: await r.json() };
+  };
+  let checks = 0;
+  const check = (fn) => {
+    fn();
+    checks++;
+  };
+  const insert = async (
+    id,
+    tenant,
+    period,
+    total,
+    status = "Verified",
+    facility = "HQ",
+    category = "Purchased Electricity",
+  ) =>
+    db.query(
+      `INSERT INTO emissions(id,company_id,date,activity,scope,category,quantity,emissions,status,facility,conversion_factor,input_unit,raw_input,result_kg,result_tonnes,reporting_period) VALUES($1,$2,$3,'Electricity','Scope 2',$4,'1550 kWh','display',$5,$6,0.42,'kWh','1550',$7,$8,$9)`,
+      [
+        id,
+        tenant,
+        new Date().toISOString(),
+        category,
+        status,
+        facility,
+        total === null ? null : total * 1000,
+        total,
+        period,
+      ],
+    );
   try {
-    // Authenticate Company A
-    const compALogin = await request(baseUrl, "/api/auth/login", {
-      method: "POST",
-      body: { email: "companya@ecotrack.test", password: initialPassword },
-    });
-    const tokenA = compALogin.data?.data?.token;
-    recordResult("1. Auth", "Company A login successful", compALogin.status === 200 && !!tokenA);
-
-    // Authenticate Company B
-    const compBLogin = await request(baseUrl, "/api/auth/login", {
-      method: "POST",
-      body: { email: "companyb@ecotrack.test", password: initialPassword },
-    });
-    const tokenB = compBLogin.data?.data?.token;
-    recordResult("2. Auth", "Company B login successful", compBLogin.status === 200 && !!tokenB);
-
-    // 1. Current period total & record count for Company A
-    const dashA = await request(baseUrl, "/api/dashboard", { token: tokenA });
-    const dataA = dashA.data?.data;
-    recordResult(
-      "1. Current Period Total",
-      "Current period emissions match calculated records",
-      dashA.status === 200 && dataA?.emissions?.current === 0.651 && dataA?.emissions?.recordCount === 8,
-      `Current: ${dataA?.emissions?.current} tCO2e, Records: ${dataA?.emissions?.recordCount}`
-    );
-
-    // 2. Previous period comparison
-    recordResult(
-      "2. Previous Period Comparison",
-      "Previous period emissions and percentage change calculated safely",
-      dataA?.emissions?.previous === 6.63 && dataA?.emissions?.percentageChange === -90.2,
-      `Prev: ${dataA?.emissions?.previous} tCO2e, Change: ${dataA?.emissions?.percentageChange}%`
-    );
-
-    // 3. Zero previous-period handling
-    const noPrevData = await getDashboardData("company-a", "Full Year 2025");
-    recordResult(
-      "3. Zero Previous Period Handling",
-      "Handles missing or zero previous period without invalid percentage",
-      noPrevData.emissions.previous === null && noPrevData.emissions.percentageChange === null,
-      `Previous: ${noPrevData.emissions.previous}, Change: ${noPrevData.emissions.percentageChange}`
-    );
-
-    // 4. Scope aggregation
-    const scopes = dataA?.scopes;
-    recordResult(
-      "4. Scope Aggregation",
-      "Aggregates Scope 1, 2, 3 totals and percentages accurately",
-      scopes?.scope1?.emissions === 0 &&
-        scopes?.scope2?.emissions === 0.651 &&
-        scopes?.scope2?.percentage === 100 &&
-        scopes?.scope3?.emissions === 0,
-      `Scope 1: ${scopes?.scope1?.emissions}, Scope 2: ${scopes?.scope2?.emissions} (100%), Scope 3: ${scopes?.scope3?.emissions}`
-    );
-
-    // 5. Data completeness: all complete
-    const completeness = dataA?.dataCompleteness;
-    recordResult(
-      "5a. Data Completeness (All Complete)",
-      "Correctly identifies all 8 records as complete (100%)",
-      completeness?.totalRecords === 8 &&
-        completeness?.completeRecords === 8 &&
-        completeness?.incompleteRecords === 0 &&
-        completeness?.completenessPercentage === 100 &&
-        completeness?.isComplete === true,
-      `${completeness?.completeRecords}/${completeness?.totalRecords} (${completeness?.completenessPercentage}%)`
-    );
-
-    // 5b. Data completeness: one incomplete
-    tempIncompleteId = `temp-incomplete-${Date.now()}`;
     await db.query(
-      `INSERT INTO emissions (id, company_id, date, activity, scope, category, quantity, emissions, status, facility, reporting_period)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [tempIncompleteId, "company-a", "2026-10-15T00:00:00.000Z", "Incomplete Activity", "Scope 1", "", "100", "0", "Draft", "", "Current Period"]
+      "INSERT INTO companies(id,name,status) VALUES($1,$1,'Active'),($2,$2,'Active')",
+      [a, b],
     );
-    const incompleteDash = await request(baseUrl, "/api/dashboard", { token: tokenA });
-    const incompData = incompleteDash.data?.data?.dataCompleteness;
-    recordResult(
-      "5b. Data Completeness (One Incomplete)",
-      "Correctly identifies incomplete record and computes percentage",
-      incompData?.totalRecords === 9 && incompData?.completeRecords === 8 && incompData?.incompleteRecords === 1,
-      `Complete: ${incompData?.completeRecords}/${incompData?.totalRecords}, Incomplete: ${incompData?.incompleteRecords}`
+    await insert(a + "-current", a, month, 0.651);
+    await insert(a + "-previous", a, prev, 6.63);
+    await insert(a + "-older", a, old, 1.5);
+    await insert(b + "-current", b, month, 1.2);
+    let r = await get("/api/dashboard");
+    check(() => assert.equal(r.status, 200));
+    let d = r.data.data;
+    check(() => assert.equal(d.emissions.current, 0.651));
+    check(() => assert.equal(d.emissions.recordCount, 1));
+    check(() => assert.equal(d.emissions.previous, 6.63));
+    check(() => assert.equal(d.emissions.percentageChange, -90.2));
+    check(() => assert.equal(d.scopes.scope2.emissions, 0.651));
+    check(() => assert.equal(d.scopes.scope2.percentage, 100));
+    check(() => assert.equal(d.dataCompleteness.completenessPercentage, 100));
+    check(() =>
+      assert.equal(d.topSources[0].category, "Purchased Electricity"),
     );
-    await db.query("DELETE FROM emissions WHERE id = $1", [tempIncompleteId]);
-    tempIncompleteId = null;
-
-    // 5c. Data completeness: zero records
-    const emptyCompData = await getDashboardData("company-a", "Q1 2026");
-    const emptyComp = emptyCompData.dataCompleteness;
-    recordResult(
-      "5c. Data Completeness (Zero Records)",
-      "Handles zero records without division by zero or false 100%",
-      emptyComp?.totalRecords === 0 &&
-        emptyComp?.completeRecords === 0 &&
-        emptyComp?.completenessPercentage === 0 &&
-        emptyComp?.message === "No activity data recorded for this period",
-      `Total: ${emptyComp?.totalRecords}, Msg: ${emptyComp?.message}`
+    check(() =>
+      assert.equal(d.calculationSummary.primaryCalculation.input, "1,550"),
     );
-
-    // 6. Top source aggregation
-    const topSources = dataA?.topSources;
-    recordResult(
-      "6. Top Source Aggregation",
-      "Ranks categories by emission total and percentage",
-      Array.isArray(topSources) &&
-        topSources.length >= 1 &&
-        topSources[0]?.category === "Purchased Electricity" &&
-        topSources[0]?.emissions === 0.651 &&
-        topSources[0]?.percentage === 100,
-      `Rank 1: ${topSources[0]?.category} (${topSources[0]?.emissions} tCO2e, ${topSources[0]?.percentage}%)`
-    );
-
-    // 7. Monthly trend aggregation
-    const trend6M = dataA?.trend;
-    const trendMeta = dataA?.trendMeta;
-    recordResult(
-      "7. Monthly Trend Aggregation",
-      "Groups emissions by month across historical window and sets hasEnoughData",
-      Array.isArray(trend6M) && trend6M.length === 6 && trendMeta?.hasEnoughData === true,
-      `Months: ${trend6M.length}, Sep: ${trend6M.find((t) => t.period === "2026-09")?.emissions}, Oct: ${trend6M.find((t) => t.period === "2026-10")?.emissions}`
-    );
-
-    // 8, 9, 10. Offset purchased, retired, and net emissions
-    const offsets = dataA?.offsets;
-    recordResult(
-      "8, 9, 10. Offsets & Net Emissions",
-      "Calculates gross emissions, purchased, retired, and net emissions accurately",
-      offsets?.grossEmissions === 0.651 &&
-        offsets?.creditsPurchased === 0 &&
-        offsets?.creditsRetired === 0 &&
-        offsets?.netEmissions === 0.651,
-      `Gross: ${offsets?.grossEmissions}, Purchased: ${offsets?.creditsPurchased}, Retired: ${offsets?.creditsRetired}, Net: ${offsets?.netEmissions}`
-    );
-
-    // 11. Tenant isolation
-    const dashB = await request(baseUrl, "/api/dashboard", { token: tokenB });
-    const dataB = dashB.data?.data;
-    recordResult(
-      "11. Tenant Isolation",
-      "Company B receives only its own data; does not see Company A emissions",
-      dashB.status === 200 && dataB?.company?.id === "company-b" && dataB?.emissions?.current !== dataA?.emissions?.current,
-      `Company B current emissions: ${dataB?.emissions?.current} tCO2e (Company A is ${dataA?.emissions?.current})`
-    );
-
-    // 12. Unauthorized dashboard access
-    const crossAccess = await request(baseUrl, "/api/dashboard?companyId=company-a", { token: tokenB });
-    recordResult(
-      "12. Unauthorized Dashboard Access",
-      "Company B cannot request Company A dashboard data (403 Forbidden)",
-      crossAccess.status === 403,
-      `Status: ${crossAccess.status}`
-    );
-
-    const unauthAccess = await request(baseUrl, "/api/dashboard");
-    recordResult(
-      "12b. Unauthenticated Access",
-      "Unauthenticated request is rejected (401 Unauthorized)",
-      unauthAccess.status === 401,
-      `Status: ${unauthAccess.status}`
-    );
-
-    // 13. Empty dashboard state
-    const emptyStatePeriod = await request(baseUrl, "/api/dashboard?period=Q1%202026", { token: tokenA });
-    const emptyStateData = emptyStatePeriod.data?.data;
-    recordResult(
-      "13. Empty Dashboard State",
-      "Handles periods with zero emissions gracefully without mock fallback",
-      emptyStatePeriod.status === 200 &&
-        emptyStateData?.emissions?.current === 0 &&
-        emptyStateData?.emissions?.recordCount === 0 &&
-        emptyStateData?.dataCompleteness?.totalRecords === 0,
-      `Current: ${emptyStateData?.emissions?.current}, Records: ${emptyStateData?.emissions?.recordCount}`
-    );
-
-    // 14. Calculation summary
-    const calcSummary = dataA?.calculationSummary;
-    recordResult(
-      "14. Calculation Summary",
-      "Provides authoritative audit formula and calculation details from backend engine",
-      calcSummary?.recordCount === 8 &&
-        calcSummary?.totalEmissions === 0.651 &&
-        calcSummary?.primaryCalculation?.input === "1,550" &&
-        calcSummary?.primaryCalculation?.factor === 0.42 &&
-        calcSummary?.primaryCalculation?.resultTonnes === 0.651,
-      `Formula: ${calcSummary?.primaryCalculation?.formula}`
-    );
-  } catch (err) {
-    console.error("Test failure:", err);
-  } finally {
-    if (tempIncompleteId) {
-      await db.query("DELETE FROM emissions WHERE id = $1", [tempIncompleteId]);
+    check(() => assert.equal(d.offsets.creditsPurchased, 0));
+    check(() => assert.equal(d.offsets.creditsRetired, 0));
+    check(() => assert.equal(d.offsets.netEmissions, 0.651));
+    for (const range of ["3M", "6M", "12M"]) {
+      d = await getDashboardData(a, "Current Period", range);
+      check(() => assert.equal(d.trend.length, parseInt(range)));
+      check(() =>
+        assert.equal(d.trend.find((t) => t.period === old).emissions, 1.5),
+      );
+      check(() =>
+        assert.equal(d.trend.find((t) => t.period === month).emissions, 0.651),
+      );
     }
-    server.close();
-  }
-
-  const passedCount = results.filter((r) => r.passed).length;
-  console.log(`\n=== Dashboard Tests Complete: ${passedCount}/${results.length} Passed ===\n`);
-  if (passedCount !== results.length) {
-    process.exit(1);
+    const oldLabel = older.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    d = await getDashboardData(a, oldLabel);
+    check(() => assert.equal(d.emissions.current, 1.5));
+    await insert(a + "-incomplete", a, month, null, "Draft", "", "");
+    d = await getDashboardData(a);
+    check(() => assert.equal(d.dataCompleteness.totalRecords, 2));
+    check(() => assert.equal(d.dataCompleteness.incompleteRecords, 1));
+    check(() => assert.equal(d.dataCompleteness.completenessPercentage, 50));
+    d = await getDashboardData(a, "Q1 2020");
+    check(() => assert.equal(d.emissions.current, 0));
+    check(() => assert.equal(d.emissions.recordCount, 0));
+    check(() => assert.equal(d.dataCompleteness.completenessPercentage, 0));
+    r = await get("/api/dashboard", token(b));
+    check(() => assert.equal(r.data.data.emissions.current, 1.2));
+    r = await get("/api/dashboard?companyId=" + b);
+    check(() => assert.equal(r.status, 403));
+    r = await get("/api/dashboard", null);
+    check(() => assert.equal(r.status, 401));
+    console.log(`PASS: ${checks} live company dashboard regression checks`);
+  } finally {
+    await db.query("DELETE FROM emissions WHERE company_id=ANY($1)", [[a, b]]);
+    await db.query("DELETE FROM companies WHERE id=ANY($1)", [[a, b]]);
+    await new Promise((r) => server.close(r));
   }
 }
-
-runDashboardTests().catch((e) => {
-  console.error("Fatal:", e);
-  process.exit(1);
-});
+run()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

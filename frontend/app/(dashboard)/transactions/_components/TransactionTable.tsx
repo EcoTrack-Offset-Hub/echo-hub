@@ -75,7 +75,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
             </div>
             <p className="text-xs font-semibold text-[#374151]">No transactions recorded yet.</p>
             <p className="text-[11px] text-[#6B7280]">
-              Purchased offset retirements from the marketplace will appear here.
+              Carbon credit purchases from the marketplace will appear here.
             </p>
           </div>
         ) : (

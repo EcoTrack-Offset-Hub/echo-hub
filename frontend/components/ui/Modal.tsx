@@ -10,6 +10,7 @@ export interface ModalProps {
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
   children: React.ReactNode;
+  footer?: React.ReactNode;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
   showCloseButton?: boolean;
 }
@@ -20,6 +21,7 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   subtitle,
   children,
+  footer,
   maxWidth = "lg",
   showCloseButton = true,
 }) => {
@@ -74,7 +76,7 @@ export const Modal: React.FC<ModalProps> = ({
         )}
       >
         {(title || showCloseButton) && (
-          <div className="flex items-start justify-between px-6 py-4.5 border-b border-[#E2E8E3] bg-[#FAFAFA]">
+          <div className="shrink-0 flex items-start justify-between px-6 py-4.5 border-b border-[#E2E8E3] bg-[#FAFAFA]">
             <div>
               {title && <h3 className="text-lg font-bold text-[#111827]">{title}</h3>}
               {subtitle && <p className="text-xs text-[#5F6B61] mt-0.5">{subtitle}</p>}
@@ -91,7 +93,8 @@ export const Modal: React.FC<ModalProps> = ({
           </div>
         )}
 
-        <div className="p-6 overflow-y-auto flex-1">{children}</div>
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">{children}</div>
+        {footer && <div className="shrink-0 px-6 py-4 bg-white border-t border-[#E2E8E3]">{footer}</div>}
       </div>
     </div>
   );

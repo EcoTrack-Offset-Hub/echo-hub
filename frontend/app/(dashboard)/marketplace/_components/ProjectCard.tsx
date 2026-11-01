@@ -42,13 +42,13 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       <div className="relative h-44 w-full bg-[#F3F4F6] overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={project.imageUrl}
+          src={project.imageUrl || "/project-placeholder.svg"}
           alt={project.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(event) => {
             event.currentTarget.onerror = null;
             event.currentTarget.src =
-              "https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=800&auto=format&fit=crop&q=80";
+              "/project-placeholder.svg";
           }}
         />
 

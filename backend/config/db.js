@@ -1,3 +1,5 @@
+const { emissionsThreshold } = require('../services/emissionsThreshold');
+const { decimal, creditQuantity } = require('../services/precision');
 // PostgreSQL data-access layer. All backend database queries stay in this file.
 let pgPool = null;
 
@@ -135,7 +137,8 @@ const DEMO_PROJECTS = [
 
 async function seedOffsetProjects() {
   const db = await getDb();
-  for (const p of DEMO_PROJECTS) {
+  for (const project of DEMO_PROJECTS) {
+    const p = { ...project, registryRef: `DEMO-${project.id.slice(-3)}`, standard: 'Demo - not certified', badge: 'Demo only', description: `DEMO ONLY - fictional project for testing. ${project.description}` };
     await db.query(
       `INSERT INTO offset_projects (
         id, name, location, country, type, standard, description, tags, price_per_tonne, available_tco2e, badge, image_url, vintage, registry_ref
@@ -161,10 +164,30 @@ async function seedOffsetProjects() {
 // Fail fast if required schema is missing and apply idempotent table updates.
 async function initDb() {
   const db = await getDb();
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    // Serialize startup DDL across development restarts and multiple instances.
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('ecotrack-schema-migrations'))");
+    await initializeSchema({ query: (text, params) => client.query(text, params) });
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  if (process.env.SEED_DEMO_PROJECTS === 'true') await seedOffsetProjects();
+  await db.query(require("fs").readFileSync(require("path").join(__dirname, "../migrations/009_complete_demo_projects.sql"), "utf8"));
+}
+
+async function initializeSchema(db) {
   const { rows } = await db.query("SELECT to_regclass('public.companies') AS companies, to_regclass('public.users') AS users, to_regclass('public.emissions') AS emissions");
   if (!rows[0]?.companies || !rows[0]?.users || !rows[0]?.emissions) {
     throw new Error("Database schema is missing. Apply backend/migrations/001_auth_company_emissions.sql before starting the backend.");
   }
+
+  await db.query(require("fs").readFileSync(require("path").join(__dirname, "../migrations/005_company_tenant_codes.sql"), "utf8"));
 
   // Ensure companies status column exists (Migration 003)
   await db.query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'Active'");
@@ -205,7 +228,15 @@ async function initDb() {
     );
   `);
 
-  await seedOffsetProjects();
+  await db.query(require("fs").readFileSync(require("path").join(__dirname, "../migrations/004_admin_dashboard.sql"), "utf8"));
+  await db.query(require("fs").readFileSync(require("path").join(__dirname, "../migrations/006_trustworthy_calculations.sql"), "utf8"));
+  await db.query(require("fs").readFileSync(require("path").join(__dirname, "../migrations/007_company_emissions_threshold.sql"), "utf8"));
+  await db.query(require("fs").readFileSync(require("path").join(__dirname, "../migrations/008_admin_operations.sql"), "utf8"));
+  for (const [category, meta] of Object.entries(SERVER_EMISSION_FACTORS)) {
+    await db.query(`INSERT INTO emission_factor_versions(category,factor,unit,methodology,standard,default_scope)
+      SELECT $1,$2,$3,$4,$5,$6 WHERE NOT EXISTS(SELECT 1 FROM emission_factor_versions WHERE category=$1)`,
+      [category,meta.factor,meta.unit,meta.methodology,meta.standard,meta.defaultScope]);
+  }
 }
 
 // Return emissions records with safe, parameterized optional filters.
@@ -226,6 +257,9 @@ async function getAllEmissions(filters = {}) {
       conversion_factor as "conversionFactor",
       input_unit as "inputUnit",
       raw_input as "rawInput",
+      revision,
+      (SELECT comment FROM emission_reviews WHERE record_id=emissions.id ORDER BY created_at DESC,id DESC LIMIT 1) AS "reviewComment",
+      calculation_details as "calculationDetails",
       formula,
       result_kg as "resultKg",
       result_tonnes as "resultTonnes",
@@ -240,6 +274,15 @@ async function getAllEmissions(filters = {}) {
   if (filters.companyId) {
     params.push(filters.companyId);
     conditions.push(`company_id = $${params.length}`);
+  }
+  if(filters.record && typeof filters.record === "string"){params.push(filters.record);conditions.push(`id = $${params.length}`);}
+  if (filters.quality && ["validated","review","incomplete"].includes(filters.quality)) {
+    params.push(filters.quality);
+    conditions.push(`(${require("./adminDashboard").QUALITY_SQL}) = $${params.length}`);
+  }
+  if (filters.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(filters.month)) {
+    params.push(filters.month + "-01");
+    conditions.push(`reporting_month = $${params.length}::date`);
   }
   if (filters.scope && filters.scope !== "All Scopes") {
     params.push(filters.scope);
@@ -278,9 +321,9 @@ async function insertEmissionRecord(record, calculation = null) {
     INSERT INTO emissions (
       id, company_id, date, activity, scope, category, quantity, emissions, status,
       facility, conversion_factor, input_unit, raw_input, formula,
-      result_kg, result_tonnes, methodology, reporting_period
+      result_kg, result_tonnes, methodology, reporting_period, factor_version_id, calculation_details
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
     ) RETURNING *;
   `;
 
@@ -298,10 +341,12 @@ async function insertEmissionRecord(record, calculation = null) {
     record.inputUnit || (calculation ? calculation.unit : null),
     calculation ? calculation.input : null,
     calculation ? calculation.formula : null,
-    calculation ? calculation.resultKg : null,
-    calculation ? calculation.resultTonnes : null,
-    calculation ? calculation.methodology : null,
+    calculation ? calculation.resultKgExact || calculation.resultKg : null,
+    calculation ? calculation.resultTonnesExact || calculation.resultTonnes : null,
+    calculation ? `${calculation.methodology} Source: ${calculation.source} Assumptions: ${calculation.assumptions}` : null,
     calculation ? calculation.reportingPeriod : null,
+    calculation?.factorVersionId || null,
+    calculation ? JSON.stringify(calculation) : null,
   ];
 
   const { rows } = await db.query(queryText, params);
@@ -326,6 +371,9 @@ async function getEmissionById(id) {
       conversion_factor as "conversionFactor",
       input_unit as "inputUnit",
       raw_input as "rawInput",
+      revision,
+      (SELECT comment FROM emission_reviews WHERE record_id=emissions.id ORDER BY created_at DESC,id DESC LIMIT 1) AS "reviewComment",
+      calculation_details as "calculationDetails",
       formula,
       result_kg as "resultKg",
       result_tonnes as "resultTonnes",
@@ -350,8 +398,8 @@ async function getEmissionById(id) {
 async function updateEmissionRecord(id, companyId, calculation) {
   const db = await getDb();
   const emissions = calculation.resultTonnes >= 1
-    ? `${calculation.resultTonnes.toFixed(2)} tCO2e`
-    : `${calculation.resultKg.toFixed(2)} kg CO2e`;
+    ? `${calculation.resultTonnesExact || calculation.resultTonnes} tCO2e`
+    : `${calculation.resultKgExact || calculation.resultKg} kg CO2e`;
   const quantity = `${calculation.input} ${calculation.unit}`;
 
   const queryText = `
@@ -369,7 +417,8 @@ async function updateEmissionRecord(id, companyId, calculation) {
       result_kg = $11,
       result_tonnes = $12,
       methodology = $13,
-      reporting_period = $14
+      reporting_period = $14,
+      factor_version_id = $17, calculation_details = $18, status = 'Needs Review'
     WHERE id = $15 AND company_id = $16
     RETURNING 
       id,
@@ -385,6 +434,9 @@ async function updateEmissionRecord(id, companyId, calculation) {
       conversion_factor as "conversionFactor",
       input_unit as "inputUnit",
       raw_input as "rawInput",
+      revision,
+      (SELECT comment FROM emission_reviews WHERE record_id=emissions.id ORDER BY created_at DESC,id DESC LIMIT 1) AS "reviewComment",
+      calculation_details as "calculationDetails",
       formula,
       result_kg as "resultKg",
       result_tonnes as "resultTonnes",
@@ -404,12 +456,14 @@ async function updateEmissionRecord(id, companyId, calculation) {
     calculation.unit,
     calculation.input,
     calculation.formula,
-    calculation.resultKg,
-    calculation.resultTonnes,
+    calculation.resultKgExact || calculation.resultKg,
+    calculation.resultTonnesExact || calculation.resultTonnes,
     calculation.methodology,
     calculation.reportingPeriod,
     id,
     companyId,
+    calculation.factorVersionId || null,
+    JSON.stringify(calculation),
   ];
 
   const { rows } = await db.query(queryText, params);
@@ -457,20 +511,20 @@ async function getEmissionsReport(companyId, period) {
   const params = [companyId];
   if (period.month) {
     params.push(`${period.month}%`);
-    conditions.push(`date LIKE $${params.length}`);
+    conditions.push(`to_char(reporting_month,'YYYY-MM') LIKE $${params.length}`);
   }
   if (period.year) {
     params.push(`${period.year}%`);
-    conditions.push(`date LIKE $${params.length}`);
+    conditions.push(`to_char(reporting_month,'YYYY-MM') LIKE $${params.length}`);
   }
   const where = conditions.join(" AND ");
   const { rows } = await db.query(`
     SELECT category, COALESCE(SUM(result_tonnes), 0)::text AS "co2e"
     FROM emissions WHERE ${where}
     GROUP BY category ORDER BY category`, params);
-  const total = rows.reduce((sum, row) => sum + Number(row.co2e || 0), 0);
+  const total = rows.reduce((sum, row) => sum.plus(row.co2e || 0), decimal(0));
   const { rows: countRows } = await db.query(`SELECT COUNT(*)::int AS count FROM emissions WHERE ${where}`, params);
-  return { totalCo2e: Number(total.toFixed(3)), recordCount: countRows[0]?.count || 0, breakdown: rows.map((row) => ({ category: row.category, co2e: Number(Number(row.co2e).toFixed(3)) })) };
+  return { totalCo2e: Number(total.toFixed(11)), recordCount: countRows[0]?.count || 0, breakdown: rows.map((row) => ({ category: row.category, co2e: Number(Number(row.co2e).toFixed(11)) })) };
 }
 
 const { SERVER_EMISSION_FACTORS } = require("../services/calculationEngine");
@@ -478,9 +532,9 @@ const { SERVER_EMISSION_FACTORS } = require("../services/calculationEngine");
 // Translate the selected dashboard label into current and comparison date ranges.
 function dashboardPeriod(period) {
   const current = new Date();
-  const currentYear = 2026; // Demo base year
-  const currentMonthNum = 10; // October 2026
-  const currentMonthStr = "2026-10";
+  const currentYear = current.getUTCFullYear();
+  const currentMonthNum = current.getUTCMonth() + 1;
+  const currentMonthStr = `${currentYear}-${String(currentMonthNum).padStart(2, "0")}`;
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -504,7 +558,7 @@ function dashboardPeriod(period) {
     const previousTo = from;
 
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    const displayRange = `Oct 1–${daysInMonth}, ${year}`;
+    const displayRange = `${monthAbbr[month - 1]} 1–${daysInMonth}, ${year}`;
 
     return {
       label: "Current Period",
@@ -641,15 +695,15 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
   const range = dashboardPeriod(period);
 
   // 1. Company details
-  const companyResult = await db.query("SELECT id, name FROM companies WHERE id = $1", [companyId]);
+  const companyResult = await db.query("SELECT id, name, monthly_emissions_limit FROM companies WHERE id = $1", [companyId]);
   const company = companyResult.rows[0] || { id: companyId, name: "Company" };
 
   // 2. Discover available reporting periods for this company
   const periodRows = await db.query(
-    "SELECT DISTINCT reporting_period FROM emissions WHERE company_id = $1 AND reporting_period IS NOT NULL",
+    "SELECT DISTINCT to_char(reporting_month,'FMMonth YYYY') AS reporting_period FROM emissions WHERE company_id = $1 AND reporting_month IS NOT NULL",
     [companyId]
   );
-  const foundPeriods = new Set(["Current Period", "September 2026", "August 2026", "Q2 2026", "Q1 2026", "Full Year 2025"]);
+  const foundPeriods = new Set(["Current Period"]);
   for (const r of periodRows.rows) {
     if (r.reporting_period && r.reporting_period.trim()) {
       foundPeriods.add(r.reporting_period.trim());
@@ -673,15 +727,7 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
   const currentParams = [companyId];
   if (range.from && range.to) {
     currentParams.push(range.from, range.to);
-    if (range.label === "Current Period") {
-      currentRecordsQuery += ` AND ((date >= $2 AND date < $3) OR reporting_period = 'Current Period')`;
-    } else {
-      currentParams.push(range.label);
-      currentRecordsQuery += ` AND ((date >= $2 AND date < $3) OR reporting_period = $4)`;
-    }
-  } else if (range.from) {
-    currentParams.push(range.from);
-    currentRecordsQuery += ` AND (date >= $2 OR reporting_period = 'Current Period')`;
+    currentRecordsQuery += ` AND reporting_month >= $2::date AND reporting_month < $3::date`;
   }
   currentRecordsQuery += ` ORDER BY date DESC, created_at DESC`;
 
@@ -693,17 +739,17 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
     const prevQuery = `
       SELECT COALESCE(SUM(result_tonnes), 0)::text AS total
       FROM emissions
-      WHERE company_id = $1 AND date >= $2 AND date < $3
+      WHERE company_id = $1 AND reporting_month >= $2::date AND reporting_month < $3::date
     `;
     const { rows: prevRows } = await db.query(prevQuery, [companyId, range.previousFrom, range.previousTo]);
     previousTotal = Number(prevRows[0]?.total || 0);
   }
 
   // 5. Current period emissions total and record count
-  const currentTotal = currentRecords.reduce((sum, r) => sum + Number(r.result_tonnes || 0), 0);
+  const currentTotal = currentRecords.reduce((sum, r) => sum.plus(r.result_tonnes || 0), decimal(0)).toNumber();
   const recordCount = currentRecords.length;
 
-  const rounded = (val) => Number(Number(val).toFixed(3));
+  const rounded = (val) => Number(decimal(val).toFixed(11));
   const roundedCurrent = rounded(currentTotal);
   const roundedPrevious = previousTotal > 0 ? rounded(previousTotal) : null;
 
@@ -727,9 +773,9 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
   }
 
   // 6. Scope Breakdown
-  const scope1Tonnes = currentRecords.filter((r) => r.scope === "Scope 1").reduce((s, r) => s + Number(r.result_tonnes || 0), 0);
-  const scope2Tonnes = currentRecords.filter((r) => r.scope === "Scope 2").reduce((s, r) => s + Number(r.result_tonnes || 0), 0);
-  const scope3Tonnes = currentRecords.filter((r) => r.scope === "Scope 3").reduce((s, r) => s + Number(r.result_tonnes || 0), 0);
+  const scope1Tonnes = currentRecords.filter((r) => r.scope === "Scope 1").reduce((s, r) => s.plus(r.result_tonnes || 0), decimal(0)).toNumber();
+  const scope2Tonnes = currentRecords.filter((r) => r.scope === "Scope 2").reduce((s, r) => s.plus(r.result_tonnes || 0), decimal(0)).toNumber();
+  const scope3Tonnes = currentRecords.filter((r) => r.scope === "Scope 3").reduce((s, r) => s.plus(r.result_tonnes || 0), decimal(0)).toNumber();
 
   const calcScopePct = (val) => (currentTotal > 0 ? Number(((val / currentTotal) * 100).toFixed(1)) : 0);
   const scopes = {
@@ -790,7 +836,7 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
   for (const r of currentRecords) {
     const cat = r.category || "Other";
     const tonnes = Number(r.result_tonnes || 0);
-    categoryMap.set(cat, (categoryMap.get(cat) || 0) + tonnes);
+    categoryMap.set(cat, decimal(categoryMap.get(cat) || 0).plus(r.result_tonnes || 0).toNumber());
   }
 
   const topSourcesList = Array.from(categoryMap.entries())
@@ -814,7 +860,7 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
     }
   }
 
-  const topSources = topSourcesList.slice(0, 3).map((s, idx) => ({
+  const topSources = topSourcesList.map((s, idx) => ({
     rank: idx + 1,
     ...s,
   }));
@@ -828,52 +874,23 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
   };
 
   if (recordCount > 0) {
-    // Find dominant category
-    const primaryCat = topSources[0]?.category || currentRecords[0]?.category || "Purchased Electricity";
-    const catRecords = currentRecords.filter((r) => r.category === primaryCat);
-    const catFactor = catRecords[0]?.conversion_factor
-      ? Number(catRecords[0].conversion_factor)
-      : SERVER_EMISSION_FACTORS[primaryCat]?.factor || 0.42;
-    const catUnit = catRecords[0]?.input_unit || SERVER_EMISSION_FACTORS[primaryCat]?.unit.split("/")[1] || "kWh";
-    const factorUnit = SERVER_EMISSION_FACTORS[primaryCat]?.unit || `kg CO₂e/${catUnit}`;
-
-    // Sum consumption input
-    let totalCatInput = 0;
-    for (const cr of catRecords) {
-      if (cr.raw_input) {
-        totalCatInput += Number(String(cr.raw_input).replace(/,/g, "")) || 0;
-      } else if (cr.quantity) {
-        const val = parseFloat(String(cr.quantity).replace(/,/g, ""));
-        if (!isNaN(val)) totalCatInput += val;
-      }
-    }
-
-    const calculatedKg = Number((totalCatInput * catFactor).toFixed(2));
-    const calculatedTonnes = Number((calculatedKg / 1000).toFixed(3));
-
-    const formattedInput = totalCatInput.toLocaleString("en-US", { maximumFractionDigits: 2 });
-    const formattedFactor = Number(catFactor.toFixed(4)).toString();
-    const formattedKg = Math.round(calculatedKg).toLocaleString("en-US");
-    const formulaStr = `${formattedInput} ${catUnit} × ${formattedFactor} ${factorUnit} = ${formattedKg} kg CO₂e = ${calculatedTonnes} tCO₂e`;
-
+    const r = currentRecords.find(r => r.formula && r.result_kg !== null) || currentRecords[0];
+    const saved = r.calculation_details || {};
+    calculationSummary.summaryText = `${recordCount} saved calculations summed; each uses its own unit and factor version. Example below is one activity, not the whole category.`;
     calculationSummary.primaryCalculation = {
-      category: primaryCat,
-      input: formattedInput,
-      unit: catUnit,
-      factor: catFactor,
-      factorUnit,
-      formula: formulaStr,
-      resultKg: calculatedKg,
-      resultTonnes: calculatedTonnes,
-      methodology: SERVER_EMISSION_FACTORS[primaryCat]?.methodology || "GHG Protocol standard calculation methodology.",
-      standard: SERVER_EMISSION_FACTORS[primaryCat]?.standard || "GHG Protocol Corporate Standard",
+      category: r.category, input: r.raw_input || "Unknown", unit: r.input_unit || "Unknown",
+      factor: Number(r.conversion_factor || 0), factorUnit: saved.factorUnit || SERVER_EMISSION_FACTORS[r.category]?.unit || "Unknown",
+      formula: r.formula || "Historical formula unavailable",
+      resultKg: Number(r.result_kg || 0), resultTonnes: Number(r.result_tonnes || 0),
+      methodology: r.methodology || "Historical methodology unavailable",
+      standard: saved.source || "See saved activity calculation",
     };
   }
 
   // 10. Emissions Trend (3M, 6M, 12M)
   const rangeMonthsCount = rangeFilter === "3M" ? 3 : rangeFilter === "12M" ? 12 : 6;
-  const targetYear = range.year || 2026;
-  const targetMonth = range.month || 10;
+  const targetYear = range.year || new Date().getUTCFullYear();
+  const targetMonth = range.month || 12;
 
   const trendMonths = [];
   const monthNamesAbbr = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -895,10 +912,10 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
 
   // Aggregate monthly emissions for this company from DB
   const { rows: monthlyRows } = await db.query(
-    `SELECT SUBSTRING(date, 1, 7) AS month, COALESCE(SUM(result_tonnes), 0)::text AS total
+    `SELECT to_char(reporting_month, 'YYYY-MM') AS month, COALESCE(SUM(result_tonnes), 0)::text AS total
      FROM emissions
      WHERE company_id = $1
-     GROUP BY SUBSTRING(date, 1, 7)
+     GROUP BY to_char(reporting_month, 'YYYY-MM')
      ORDER BY month ASC`,
     [companyId]
   );
@@ -932,7 +949,7 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
   const { rows: txRows } = await db.query(
     `SELECT 
       COALESCE(SUM(credits_tco2e), 0)::text AS "purchased",
-      COALESCE(SUM(CASE WHEN status = 'Completed' THEN credits_tco2e ELSE 0 END), 0)::text AS "retired",
+      (SELECT COALESCE(SUM(r.quantity),0) FROM credit_retirements r JOIN transactions t2 ON t2.id=r.transaction_id WHERE t2.company_id=$1)::text AS "retired",
       COUNT(*)::int AS count
      FROM transactions
      WHERE company_id = $1`,
@@ -968,6 +985,7 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
       id: company.id,
       name: company.name,
     },
+    emissionsThreshold: emissionsThreshold(company.monthly_emissions_limit, currentTotal, Boolean(range.month && range.from && range.to)),
     period: {
       key: range.label,
       label: range.label,
@@ -1034,6 +1052,8 @@ async function getAllCompanies() {
     SELECT 
       c.id, 
       c.name, 
+      c.tenant_number AS "tenantNumber",
+      c.monthly_emissions_limit AS "monthlyEmissionsLimit",
       COALESCE(c.status, 'Active') AS status,
       c.created_at AS "createdAt",
       (SELECT u.email FROM users u WHERE u.company_id = c.id ORDER BY u.created_at ASC LIMIT 1) AS "userEmail"
@@ -1041,7 +1061,10 @@ async function getAllCompanies() {
     ORDER BY c.created_at DESC;
   `;
   const { rows } = await db.query(queryText);
-  return rows;
+  return rows.map(({ tenantNumber, ...company }) => ({
+    ...company,
+    tenantCode: `TEN-${String(tenantNumber).padStart(4, "0")}`,
+  }));
 }
 
 // Find company by case-insensitive name.
@@ -1063,7 +1086,7 @@ async function createCompanyWithUser({ name, email, passwordHash }) {
     const userId = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
     const compRes = await client.query(
-      'INSERT INTO companies (id, name, status) VALUES ($1, $2, \'Active\') RETURNING id, name, status, created_at AS "createdAt"',
+      'INSERT INTO companies (id, name, status) VALUES ($1, $2, \'Active\') RETURNING id, name, status, tenant_number AS "tenantNumber", created_at AS "createdAt"',
       [companyId, name.trim()]
     );
     const userRes = await client.query(
@@ -1073,7 +1096,10 @@ async function createCompanyWithUser({ name, email, passwordHash }) {
 
     await client.query("COMMIT");
     return {
-      company: compRes.rows[0],
+      company: {
+        ...compRes.rows[0],
+        tenantCode: `TEN-${String(compRes.rows[0].tenantNumber).padStart(4, "0")}`,
+      },
       user: userRes.rows[0],
     };
   } catch (err) {
@@ -1085,7 +1111,7 @@ async function createCompanyWithUser({ name, email, passwordHash }) {
 }
 
 // Update company name and/or primary user login email atomically without changing companyId / tenant ID.
-async function updateCompany({ companyId, name, email }) {
+async function updateCompany({ companyId, name, email, monthlyEmissionsLimit }) {
   await getDb();
   const client = await pgPool.connect();
   try {
@@ -1137,6 +1163,11 @@ async function updateCompany({ companyId, name, email }) {
       throw new Error("Company not found.");
     }
 
+    if (monthlyEmissionsLimit !== undefined) {
+      await client.query('UPDATE companies SET monthly_emissions_limit=$1 WHERE id=$2', [monthlyEmissionsLimit, companyId]);
+    }
+    compRow.monthlyEmissionsLimit = (await client.query('SELECT monthly_emissions_limit FROM companies WHERE id=$1', [companyId])).rows[0].monthly_emissions_limit;
+
     // Update primary company user login email if provided
     let userRow;
     if (email) {
@@ -1183,7 +1214,7 @@ async function resetCompanyUserPassword({ companyId, passwordHash }) {
 async function setCompanyStatus({ companyId, status }) {
   const db = await getDb();
   const res = await db.query(
-    'UPDATE companies SET status = $1 WHERE id = $2 RETURNING id, name, status, created_at AS "createdAt"',
+    'UPDATE companies SET status = $1 WHERE id = $2 RETURNING id, name, status, tenant_number AS "tenantNumber", created_at AS "createdAt"',
     [status, companyId]
   );
   if (res.rows.length === 0) {
@@ -1207,14 +1238,15 @@ async function getAllProjects(filters = {}) {
       tags,
       price_per_tonne AS "pricePerTonne",
       available_tco2e AS "availableTCO2e",
-      badge,
+      CASE WHEN registry_ref LIKE 'DEMO-%' THEN 'Demo only' WHEN certification_reviewed_at IS NOT NULL AND lifecycle_status='Active' THEN 'Evidence Reviewed' ELSE 'Review Pending' END AS badge,
       image_url AS "imageUrl",
       vintage,
       registry_ref AS "registryRef",
+      registry_url AS "registryUrl", certification_evidence AS "certificationEvidence", certification_reviewed_at AS "certificationReviewedAt", lifecycle_status AS "lifecycleStatus",
       created_at AS "createdAt"
     FROM offset_projects
   `;
-  const conditions = [];
+  const conditions = ["lifecycle_status='Active' AND certification_reviewed_at IS NOT NULL AND registry_url IS NOT NULL AND certification_evidence IS NOT NULL"];
   const params = [];
 
   if (filters.category && filters.category !== "All") {
@@ -1247,10 +1279,10 @@ async function getAllProjects(filters = {}) {
   // Summary aggregates computed dynamically from all projects
   const { rows: statRows } = await db.query(`
     SELECT 
-      COUNT(*)::int AS "count",
+      COUNT(*) FILTER (WHERE lifecycle_status='Active' AND certification_reviewed_at IS NOT NULL)::int AS "count",
       COALESCE(SUM(available_tco2e), 0)::text AS "totalAvailable",
       COALESCE(AVG(price_per_tonne), 0)::text AS "avgPrice"
-    FROM offset_projects
+    FROM offset_projects WHERE lifecycle_status='Active' AND certification_reviewed_at IS NOT NULL AND registry_url IS NOT NULL AND certification_evidence IS NOT NULL
   `);
   const count = statRows[0]?.count || 0;
   const totalAvailable = Number(statRows[0]?.totalAvailable || 0);
@@ -1282,10 +1314,11 @@ async function getProjectById(id) {
       tags,
       price_per_tonne AS "pricePerTonne",
       available_tco2e AS "availableTCO2e",
-      badge,
+      CASE WHEN registry_ref LIKE 'DEMO-%' THEN 'Demo only' WHEN certification_reviewed_at IS NOT NULL AND lifecycle_status='Active' THEN 'Evidence Reviewed' ELSE 'Review Pending' END AS badge,
       image_url AS "imageUrl",
       vintage,
       registry_ref AS "registryRef",
+      registry_url AS "registryUrl", certification_evidence AS "certificationEvidence", certification_reviewed_at AS "certificationReviewedAt", lifecycle_status AS "lifecycleStatus",
       created_at AS "createdAt"
     FROM offset_projects
     WHERE id = $1
@@ -1312,7 +1345,7 @@ async function purchaseCredits({ companyId, projectId, quantityTCO2e }) {
     const projRes = await client.query(
       `SELECT id, name, location, country, type, standard, description, tags, 
               price_per_tonne AS "pricePerTonne", available_tco2e AS "availableTCO2e", 
-              badge, image_url AS "imageUrl", vintage, registry_ref AS "registryRef"
+              badge, image_url AS "imageUrl", vintage, registry_ref AS "registryRef", registry_url, certification_evidence, certification_reviewed_at
        FROM offset_projects 
        WHERE id = $1 FOR UPDATE`,
       [projectId]
@@ -1323,8 +1356,12 @@ async function purchaseCredits({ companyId, projectId, quantityTCO2e }) {
     }
 
     const project = projRes.rows[0];
+    const lifecycle = await client.query("SELECT lifecycle_status FROM offset_projects WHERE id=$1", [projectId]);
+    if (lifecycle.rows[0].lifecycle_status !== "Active") throw new Error("Project is not active.");
+    if (!project.registry_url || !project.certification_evidence || !project.certification_reviewed_at) throw new Error("Project certification evidence is not active. Ask an administrator to review it.");
     const available = Number(project.availableTCO2e);
-    const qty = Number(quantityTCO2e);
+    const requested = creditQuantity(quantityTCO2e);
+    const qty = requested.toNumber();
 
     if (!Number.isFinite(qty) || qty <= 0) {
       throw new Error("Requested quantity must be a positive number.");
@@ -1334,19 +1371,19 @@ async function purchaseCredits({ companyId, projectId, quantityTCO2e }) {
       throw new Error(`Requested quantity (${qty.toLocaleString()} tCO2e) exceeds available inventory (${available.toLocaleString()} tCO2e).`);
     }
 
-    const newAvailable = available - qty;
+    const newAvailable = decimal(project.availableTCO2e).minus(requested).toFixed(2);
     await client.query(
       "UPDATE offset_projects SET available_tco2e = $1 WHERE id = $2",
       [newAvailable, projectId]
     );
 
     const price = Number(project.pricePerTonne);
-    const subtotal = Number((qty * price).toFixed(2));
-    const serviceFee = Number((subtotal * 0.02).toFixed(2));
-    const totalAmount = Number((subtotal + serviceFee).toFixed(2));
+    const subtotal = decimal(project.pricePerTonne).times(requested).toDecimalPlaces(2).toNumber();
+    const serviceFee = decimal(subtotal).times("0.02").toDecimalPlaces(2).toNumber();
+    const totalAmount = decimal(subtotal).plus(serviceFee).toNumber();
 
     const txnInternalId = `txn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const randomSeq = Math.floor(1000 + Math.random() * 9000);
+    const randomSeq = require("crypto").randomUUID();
     const transactionId = `TXN-${Date.now().toString().slice(-4)}${randomSeq}`;
     const certYear = new Date().getFullYear();
     const certMonth = String(new Date().getMonth() + 1).padStart(2, "0");
@@ -1407,7 +1444,7 @@ async function purchaseCredits({ companyId, projectId, quantityTCO2e }) {
       updatedProject: {
         ...project,
         pricePerTonne: Number(project.pricePerTonne),
-        availableTCO2e: newAvailable,
+        availableTCO2e: Number(newAvailable),
         tags: Array.isArray(project.tags) ? project.tags : [],
       },
     };
@@ -1516,7 +1553,8 @@ async function getCompanyPortfolio(companyId) {
   const db = await getDb();
   const queryText = `
     SELECT 
-      COALESCE(SUM(t.credits_tco2e), 0)::text AS "totalCreditsRetired",
+      (SELECT COALESCE(SUM(r.quantity),0) FROM credit_retirements r JOIN transactions t2 ON t2.id=r.transaction_id WHERE t2.company_id=$1)::text AS "totalCreditsRetired",
+      COALESCE(SUM(t.credits_tco2e),0)::text AS "totalCreditsPurchased",
       COALESCE(SUM(t.total_amount), 0)::text AS "totalInvested",
       COUNT(t.id)::int AS "transactionCount",
       COUNT(DISTINCT t.project_id)::int AS "projectsSupportedCount"
@@ -1541,6 +1579,7 @@ async function getCompanyPortfolio(companyId) {
 
   return {
     totalCreditsRetired: Number(Number(row.totalCreditsRetired || 0).toFixed(2)),
+    totalCreditsPurchased: Number(row.totalCreditsPurchased || 0),
     totalInvested: Number(Number(row.totalInvested || 0).toFixed(2)),
     transactionCount: row.transactionCount || 0,
     projectsSupportedCount: row.projectsSupportedCount || 0,
@@ -1550,6 +1589,38 @@ async function getCompanyPortfolio(companyId) {
       amount: Number(Number(b.amount || 0).toFixed(2)),
     })),
   };
+}
+
+// Delete a tenant and its dependent records atomically on one connection.
+async function deleteCompany(companyId) {
+  await getDb();
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT id FROM companies WHERE id = $1 FOR UPDATE", [companyId]);
+    if (!rows.length) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+    const retained = await client.query("SELECT 1 FROM transactions WHERE company_id=$1 UNION ALL SELECT 1 FROM emission_reviews WHERE company_id=$1 LIMIT 1", [companyId]);
+    if (retained.rows.length) {
+      const error = new Error('This company has financial or review history. Deactivate the company to preserve its records.');
+      error.code = 'ARCHIVE_REQUIRED';
+      throw error;
+    }
+    await client.query("DELETE FROM transactions WHERE company_id = $1", [companyId]);
+    await client.query("DELETE FROM scenarios WHERE company_id = $1", [companyId]);
+    await client.query("DELETE FROM emissions WHERE company_id = $1", [companyId]);
+    await client.query("DELETE FROM users WHERE company_id = $1", [companyId]);
+    await client.query("DELETE FROM companies WHERE id = $1", [companyId]);
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = {
@@ -1572,6 +1643,7 @@ module.exports = {
   updateCompany,
   resetCompanyUserPassword,
   setCompanyStatus,
+  deleteCompany,
   getAllProjects,
   getProjectById,
   purchaseCredits,

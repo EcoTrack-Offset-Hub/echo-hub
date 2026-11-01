@@ -28,12 +28,18 @@ export const emissionsApi = {
    * Retrieves emissions records and summary KPIs
    */
   async getEmissions(filters?: {
+    record?: string;
+    month?: string;
+    quality?: string;
     scope?: string;
     category?: string;
     search?: string;
     companyId?: string;
   }): Promise<EmissionsResponseData> {
     const params = new URLSearchParams();
+    if(filters?.record)params.set("record",filters.record);
+    if(filters?.month)params.set("month",filters.month);
+    if(filters?.quality)params.set("quality",filters.quality);
     if (filters?.scope && filters.scope !== "All Scopes") params.set("scope", filters.scope);
     if (filters?.category && filters.category !== "All Categories") params.set("category", filters.category);
     if (filters?.search) params.set("search", filters.search);

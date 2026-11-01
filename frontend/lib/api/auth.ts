@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { logout as clearSession } from "@/lib/auth/session";
 import { AuthenticatedUser } from "@/types";
 
 export interface AuthLoginResponse {
@@ -17,8 +18,9 @@ export const authApi = {
         body: JSON.stringify({ email, password }),
       });
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("ecotrack_auth_token", res.token);
-        window.localStorage.setItem("ecotrack_auth_user", JSON.stringify(res.user));
+        window.sessionStorage.removeItem("ecotrack_selected_company_id");
+        window.sessionStorage.setItem("ecotrack_auth_token", res.token);
+        window.sessionStorage.setItem("ecotrack_auth_user", JSON.stringify(res.user));
       }
       return { success: true, user: res.user };
     } catch (err: unknown) {
@@ -28,10 +30,7 @@ export const authApi = {
   },
 
   async logout(): Promise<void> {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("ecotrack_auth_token");
-      window.localStorage.removeItem("ecotrack_auth_user");
-    }
+    clearSession();
   },
 };
 

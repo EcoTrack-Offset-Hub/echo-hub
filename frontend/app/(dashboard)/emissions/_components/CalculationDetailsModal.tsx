@@ -76,13 +76,13 @@ export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = (
             <div className="p-2.5 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB]">
               <p className="text-[10px] text-[#6B7280] uppercase">Conversion Factor</p>
               <p className="text-sm font-bold text-[#2E7D32]">{calculation.conversionFactor}</p>
-              <p className="text-[10px] text-[#5F6B61]">kg CO₂e/{calculation.unit}</p>
+              <p className="text-[10px] text-[#5F6B61]">{calculation.factorUnit || `kg CO2e/${calculation.unit}`}</p>
             </div>
 
             <div className="p-2.5 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB]">
               <p className="text-[10px] text-[#6B7280] uppercase">Calculated Output</p>
               <p className="text-sm font-bold text-[#111827]">
-                {calculation.resultKg.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                {calculation.resultKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 8 })}
               </p>
               <p className="text-[10px] text-[#5F6B61]">kg CO₂e</p>
             </div>
@@ -107,6 +107,9 @@ export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = (
             <span>Methodology & Audit Assumptions</span>
           </div>
           <p className="leading-relaxed pl-5 text-[#5F6B61]">{calculation.methodology}</p>
+          <p className="pl-5">Source: {calculation.source || "Historical source not recorded"}</p>
+          <p className="pl-5">Assumptions: {calculation.assumptions || "Historical assumptions not recorded"}</p>
+          {calculation.factorVersionId && <p className="pl-5">Factor version: {calculation.factorVersionId}</p>}
           <div className="pl-5 pt-1 text-[11px] text-[#879188] flex items-center justify-between">
             <span>Period: {calculation.reportingPeriod}</span>
             <span>Facility: {calculation.facility}</span>

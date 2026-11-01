@@ -163,7 +163,7 @@ export default function TransactionsPage() {
 
   // Compute live summary statistics based on current records
   const totalSpend = transactions.reduce((acc, t) => acc + t.totalAmount, 0);
-  const totalCreditsRetired = transactions.reduce((acc, t) => acc + t.creditsTCO2e, 0);
+  const totalCreditsPurchased = transactions.reduce((acc, t) => acc + t.creditsTCO2e, 0);
 
   return (
     <div className="flex-1 flex flex-col min-h-screen">
@@ -196,7 +196,7 @@ export default function TransactionsPage() {
               Export
             </Button>
 
-            <Link href="/marketplace">
+            {user.role !== "ADMIN" && <Link href="/marketplace">
               <Button
                 variant="primary"
                 size="md"
@@ -204,7 +204,7 @@ export default function TransactionsPage() {
               >
                 New Transaction
               </Button>
-            </Link>
+            </Link>}
           </div>
         </div>
 
@@ -227,17 +227,17 @@ export default function TransactionsPage() {
             <p className="text-xs text-[#2E7D32] font-semibold">Across all verified registries</p>
           </div>
 
-          {/* Credits Retired */}
+          {/* Credits Purchased */}
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#5F6B61]">Credits Retired</span>
+              <span className="text-xs font-semibold text-[#5F6B61]">Credits Purchased</span>
               <div className="w-8 h-8 rounded-lg bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4" />
               </div>
             </div>
             <div className="my-2 flex items-baseline gap-1.5">
               <span className="text-3xl font-extrabold text-[#111827]">
-                {totalCreditsRetired.toLocaleString()}
+                {totalCreditsPurchased.toLocaleString()}
               </span>
               <span className="text-xs font-semibold text-[#5F6B61]">tCO₂e</span>
             </div>
@@ -262,7 +262,7 @@ export default function TransactionsPage() {
           {/* Certificates Issued */}
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#5F6B61]">Retirement Proofs</span>
+              <span className="text-xs font-semibold text-[#5F6B61]">Purchase Receipts</span>
               <div className="w-8 h-8 rounded-lg bg-[#F3E8FF] text-[#7E22CE] flex items-center justify-center">
                 <Award className="w-4 h-4" />
               </div>

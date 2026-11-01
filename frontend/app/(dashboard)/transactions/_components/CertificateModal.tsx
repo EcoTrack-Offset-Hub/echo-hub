@@ -25,8 +25,8 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Official Certificate of Retirement"
-      subtitle="Public registry serialization and verification certificate"
+      title="Carbon Credit Purchase Receipt"
+      subtitle="Purchase record; separate registry evidence is required for retirement"
       maxWidth="lg"
     >
       <div className="space-y-5">
@@ -40,7 +40,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
               </div>
               <div>
                 <h4 className="text-sm font-extrabold text-[#111827]">
-                  EcoTrack Carbon Retirement Certificate
+                  EcoTrack Carbon Credit Purchase
                 </h4>
                 <p className="text-[11px] text-[#2E7D32] font-semibold">
                   Registry Standard: {transaction.verificationStandard}
@@ -55,11 +55,11 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
 
           {/* Statement */}
           <div className="text-center py-2 space-y-1">
-            <p className="text-xs text-[#5F6B61]">This document certifies that</p>
+            <p className="text-xs text-[#5F6B61]">This purchase record confirms that</p>
             <h3 className="text-lg font-extrabold text-[#111827]">
-              {companyName || "Certified Entity"}
+              {companyName || "Purchasing Entity"}
             </h3>
-            <p className="text-xs text-[#5F6B61]">has permanently retired</p>
+            <p className="text-xs text-[#5F6B61]">has purchased</p>
             <p className="text-2xl font-black text-[#2E7D32]">
               {transaction.creditsTCO2e.toLocaleString()} tCO₂e
             </p>
@@ -77,7 +77,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
               </span>
             </div>
             <div>
-              <span className="text-[10px] text-[#6B7280] block">Date of Retirement</span>
+              <span className="text-[10px] text-[#6B7280] block">Date of Purchase</span>
               <span className="font-medium text-[#111827]">{transaction.date}</span>
             </div>
             <div>
@@ -87,9 +87,9 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
               </span>
             </div>
             <div>
-              <span className="text-[10px] text-[#6B7280] block">Audit Integrity</span>
+              <span className="text-[10px] text-[#6B7280] block">Record Source</span>
               <span className="text-[#2E7D32] font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Immutable
+                <CheckCircle2 className="w-3.5 h-3.5" /> Transaction Ledger
               </span>
             </div>
           </div>
@@ -97,7 +97,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           {/* Security stamp */}
           <div className="pt-2 flex items-center justify-between text-[11px] text-[#5F6B61]">
             <span className="flex items-center gap-1 font-mono text-[10px]">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D32]" /> Cryptographically Sealed
+              <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D32]" /> Recorded in EcoTrack
             </span>
             <span className="text-[10px] text-[#9CA3AF]">
               Status: <strong className="text-[#166534]">{transaction.status}</strong>

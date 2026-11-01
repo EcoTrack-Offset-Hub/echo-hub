@@ -90,7 +90,7 @@ async function runTests() {
         consumption: 250,
         unit: "kWh",
         facility: `Fixture Facility ${uniqueSuffix}`,
-        reportingPeriod: "Q2 2026",
+        reportingPeriod: "2026-04",
       },
     });
     createdFixtureEmissionId = fixtureEmisRes.data?.data?.record?.id || null;

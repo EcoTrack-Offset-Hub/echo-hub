@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { Header } from "@/components/layout/Header";
+import { EmissionsThresholdNotice } from "@/components/charts/EmissionsThresholdNotice";
 import { EmissionsTrendChart } from "@/components/charts/EmissionsTrendChart";
 import { dashboardApi, CompanyDashboardData } from "@/lib/api/dashboard";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
@@ -32,7 +34,7 @@ import {
   Info,
 } from "lucide-react";
 
-export default function DashboardPage() {
+function CompanyDashboard() {
   const { user, selectedCompanyId, companies } = useAuthSession();
   const activeCompanyName =
     companies.find((c) => c.id === selectedCompanyId)?.name ||
@@ -74,14 +76,7 @@ export default function DashboardPage() {
   // Available periods from backend or default standard options
   const periodOptions = data?.availablePeriods?.length
     ? data.availablePeriods
-    : [
-        { key: "Current Period", label: "Current Period", displayRange: "Oct 1–31, 2026" },
-        { key: "September 2026", label: "September 2026", displayRange: "Sep 1–30, 2026" },
-        { key: "August 2026", label: "August 2026", displayRange: "Aug 1–31, 2026" },
-        { key: "Q2 2026", label: "Q2 2026", displayRange: "Apr 1–Jun 30, 2026" },
-        { key: "Q1 2026", label: "Q1 2026", displayRange: "Jan 1–Mar 31, 2026" },
-        { key: "Full Year 2025", label: "Full Year 2025", displayRange: "Jan 1–Dec 31, 2025" },
-      ];
+    : [{ key: "Current Period", label: "Current Period", displayRange: "Current reporting month" }];
 
   const emissions = data?.emissions;
   const scopes = data?.scopes;
@@ -100,7 +95,7 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight flex items-center gap-3">
-              <span>{user?.role === "ADMIN" ? "Welcome back, Admin" : "Welcome back"}</span>
+              <span>{user.role === "ADMIN" ? activeCompanyName : "Welcome back"}</span>
               {loading && <Loader2 className="w-5 h-5 text-[#2E7D32] animate-spin" />}
             </h2>
             <p className="text-xs sm:text-sm text-[#5F6B61] mt-0.5">
@@ -205,6 +200,7 @@ export default function DashboardPage() {
         {/* Main Content Render */}
         {data && (
           <>
+            <EmissionsThresholdNotice threshold={data.emissionsThreshold} total={data.emissions.current} period={data.period.displayRange} />
             {/* ROW 1: 3 Top Summary KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {/* Card 1: Current Period Emissions */}
@@ -219,7 +215,7 @@ export default function DashboardPage() {
                 <div className="my-2">
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-3xl font-extrabold text-[#111827] tracking-tight">
-                      {emissions?.current !== undefined ? emissions.current.toLocaleString() : "0"}
+                      {emissions?.current !== undefined ? emissions.current.toLocaleString(undefined, { maximumFractionDigits: 11 }) : "0"}
                     </span>
                     <span className="text-xs font-semibold text-[#5F6B61]">tCO₂e</span>
                   </div>
@@ -411,7 +407,7 @@ export default function DashboardPage() {
                             </span>
                             <div className="flex items-center gap-2">
                               <span className="text-[#111827] font-bold">
-                                {source.emissions.toLocaleString()} tCO₂e
+                                {source.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e
                               </span>
                               <span className="text-[#6B7280] text-[11px] w-8 text-right">
                                 {source.percentage}%
@@ -493,7 +489,7 @@ export default function DashboardPage() {
                         <span>Gross Emissions</span>
                       </div>
                       <p className="text-lg font-extrabold text-[#111827]">
-                        {offsets?.grossEmissions !== undefined ? offsets.grossEmissions.toLocaleString() : "0"} tCO₂e
+                        {offsets?.grossEmissions !== undefined ? offsets.grossEmissions.toLocaleString(undefined, { maximumFractionDigits: 11 }) : "0"} tCO₂e
                       </p>
                       <p className="text-[10px] text-[#6B7280] mt-0.5">Current period</p>
                     </div>
@@ -507,7 +503,7 @@ export default function DashboardPage() {
                         <span>Credits Purchased</span>
                       </div>
                       <p className="text-lg font-extrabold text-[#111827]">
-                        {offsets?.creditsPurchased !== undefined ? offsets.creditsPurchased.toLocaleString() : "0"} tCO₂e
+                        {offsets?.creditsPurchased !== undefined ? offsets.creditsPurchased.toLocaleString(undefined, { maximumFractionDigits: 11 }) : "0"} tCO₂e
                       </p>
                       <p className="text-[10px] text-[#6B7280] mt-0.5">
                         {offsets?.purchasedSubtext || "No purchases yet"}
@@ -523,7 +519,7 @@ export default function DashboardPage() {
                         <span>Credits Retired</span>
                       </div>
                       <p className="text-lg font-extrabold text-[#111827]">
-                        {offsets?.creditsRetired !== undefined ? offsets.creditsRetired.toLocaleString() : "0"} tCO₂e
+                        {offsets?.creditsRetired !== undefined ? offsets.creditsRetired.toLocaleString(undefined, { maximumFractionDigits: 11 }) : "0"} tCO₂e
                       </p>
                       <p className="text-[10px] text-[#6B7280] mt-0.5">
                         {offsets?.retiredSubtext || "No retirements yet"}
@@ -539,7 +535,7 @@ export default function DashboardPage() {
                         <span>Net Emissions</span>
                       </div>
                       <p className="text-lg font-extrabold text-[#111827]">
-                        {offsets?.netEmissions !== undefined ? offsets.netEmissions.toLocaleString() : "0"} tCO₂e
+                        {offsets?.netEmissions !== undefined ? offsets.netEmissions.toLocaleString(undefined, { maximumFractionDigits: 11 }) : "0"} tCO₂e
                       </p>
                       <p className="text-[10px] text-[#16A34A] font-semibold mt-0.5">
                         {offsets?.netSubtext || "Same as gross (no offsets)"}
@@ -647,4 +643,9 @@ export default function DashboardPage() {
       </main>
     </div>
   );
+}
+
+export default function DashboardPage() {
+  const { isAdminWorkspace, selectedCompanyId } = useAuthSession();
+  return isAdminWorkspace ? <AdminDashboard /> : <CompanyDashboard key={selectedCompanyId} />;
 }

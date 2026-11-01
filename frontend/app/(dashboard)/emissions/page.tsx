@@ -1,5 +1,9 @@
 "use client";
 
+import { EmissionReview } from "@/components/admin/EmissionReview";
+import { Modal } from "@/components/ui/Modal";
+import Decimal from "decimal.js";
+import { recordTonnes } from "@/lib/validation/emissionTotals";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
@@ -26,28 +30,22 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-function parseTCO2e(emissionStr: string): number {
-  if (!emissionStr) return 0;
-  const clean = emissionStr.replace(/,/g, "").trim();
-  if (clean.includes("kg")) {
-    const num = parseFloat(clean.replace(/[^\d.-]/g, ""));
-    return isNaN(num) ? 0 : Number((num / 1000).toFixed(3));
-  }
-  const num = parseFloat(clean.replace(/[^\d.-]/g, ""));
-  return isNaN(num) ? 0 : Number(num.toFixed(3));
-}
+const parseTCO2e = (record: EmissionRecord) => recordTonnes(record).toNumber();
 
 export default function EmissionsPage() {
-  const { user, selectedCompanyId } = useAuthSession();
+  const { user, selectedCompanyId, companies } = useAuthSession();
 
+  const [reviewRecordId, setReviewRecordId] = useState<string | null>(null);
   // Filter States
   const [dateRange, setDateRange] = useState("Last 12 months");
   const [selectedScope, setSelectedScope] = useState("All Scopes");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
 
-  const effectiveCompanyId = user.role === "ADMIN" ? selectedCompanyId : user.companyId || selectedCompanyId;
-  const cacheKey = `emissions:${effectiveCompanyId}:${selectedScope}:${selectedCategory}`;
+  const [linkedFilters,setLinkedFilters]=useState<{companyId?:string;month?:string;quality?:string;record?:string;all?:string}>({});
+  useEffect(()=>{const timer=setTimeout(()=>{const q=new URLSearchParams(window.location.search);if(user.role === 'ADMIN' && q.get('review') === '1' && q.get('record')) setReviewRecordId(q.get('record'));setLinkedFilters(Object.fromEntries(['companyId','month','quality','record','all'].filter(k=>q.has(k)).map(k=>[k,q.get(k)!])));},0);return()=>clearTimeout(timer);},[user.role]);
+  const effectiveCompanyId = user.role === "ADMIN" ? linkedFilters.all === "1" || linkedFilters.record ? "" : linkedFilters.companyId || selectedCompanyId : user.companyId || selectedCompanyId;
+  const cacheKey = `emissions:${effectiveCompanyId}:${selectedScope}:${selectedCategory}:${JSON.stringify(linkedFilters)}`;
 
   const [records, setRecords] = useState<EmissionRecord[]>(() => {
     return clientCache.get<EmissionRecord[]>(cacheKey) ?? [];
@@ -78,7 +76,8 @@ export default function EmissionsPage() {
       const response = await emissionsApi.getEmissions({
         scope: selectedScope,
         category: selectedCategory,
-        companyId: user.role === "ADMIN" ? selectedCompanyId : undefined,
+        ...linkedFilters,
+        companyId: user.role === "ADMIN" ? linkedFilters.all==='1' || linkedFilters.record ? undefined : linkedFilters.companyId || selectedCompanyId : undefined,
       });
       const recs = response.records || [];
       setRecords(recs);
@@ -92,7 +91,7 @@ export default function EmissionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [cacheKey, selectedScope, selectedCategory, selectedCompanyId, user.role]);
+  }, [cacheKey, selectedScope, selectedCategory, selectedCompanyId, user.role, linkedFilters]);
 
   useEffect(() => {
     let ignore = false;
@@ -101,7 +100,8 @@ export default function EmissionsPage() {
         const response = await emissionsApi.getEmissions({
           scope: selectedScope,
           category: selectedCategory,
-          companyId: user.role === "ADMIN" ? selectedCompanyId : undefined,
+          ...linkedFilters,
+        companyId: user.role === "ADMIN" ? linkedFilters.all==='1' || linkedFilters.record ? undefined : linkedFilters.companyId || selectedCompanyId : undefined,
         });
         if (!ignore) {
           const recs = response.records || [];
@@ -124,9 +124,10 @@ export default function EmissionsPage() {
     return () => {
       ignore = true;
     };
-  }, [cacheKey, selectedScope, selectedCategory, selectedCompanyId, user.role]);
+  }, [cacheKey, selectedScope, selectedCategory, selectedCompanyId, user.role, linkedFilters]);
 
   const handleResetFilters = () => {
+    setLinkedFilters(user.role === "ADMIN" ? { all: "1" } : {});
     setDateRange("Last 12 months");
     setSelectedScope("All Scopes");
     setSelectedCategory("All Categories");
@@ -149,6 +150,7 @@ export default function EmissionsPage() {
 
   const handleViewRecord = (rec: EmissionRecord) => {
     const calc: CalculationResult = {
+      ...rec.calculationDetails,
       activity: rec.activity,
       scope: rec.scope,
       category: rec.category,
@@ -242,10 +244,10 @@ export default function EmissionsPage() {
 
   // Dynamically compute KPI totals from live records (NOT hardcoded)
   const { totalEmissions, scope1Total, scope2Total, scope3Total, scope1Pct, scope2Pct, scope3Pct } = useMemo(() => {
-    const s1 = filteredRecords.filter((r) => r.scope === "Scope 1").reduce((acc, r) => acc + parseTCO2e(r.emissions), 0);
-    const s2 = filteredRecords.filter((r) => r.scope === "Scope 2").reduce((acc, r) => acc + parseTCO2e(r.emissions), 0);
-    const s3 = filteredRecords.filter((r) => r.scope === "Scope 3").reduce((acc, r) => acc + parseTCO2e(r.emissions), 0);
-    const total = s1 + s2 + s3;
+    const s1 = filteredRecords.filter((r) => r.scope === "Scope 1").reduce((acc, r) => acc.plus(recordTonnes(r)), new Decimal(0)).toNumber();
+    const s2 = filteredRecords.filter((r) => r.scope === "Scope 2").reduce((acc, r) => acc.plus(recordTonnes(r)), new Decimal(0)).toNumber();
+    const s3 = filteredRecords.filter((r) => r.scope === "Scope 3").reduce((acc, r) => acc.plus(recordTonnes(r)), new Decimal(0)).toNumber();
+    const total = new Decimal(s1).plus(s2).plus(s3).toNumber();
 
     return {
       totalEmissions: total,
@@ -262,8 +264,8 @@ export default function EmissionsPage() {
   const categoryBreakdown = useMemo(() => {
     const categoryTotals: Record<string, number> = {};
     for (const r of filteredRecords) {
-      const val = parseTCO2e(r.emissions);
-      categoryTotals[r.category] = (categoryTotals[r.category] || 0) + val;
+      const val = parseTCO2e(r);
+      categoryTotals[r.category] = new Decimal(categoryTotals[r.category] || 0).plus(val).toNumber();
     }
 
     const colors: Record<string, string> = {
@@ -278,7 +280,7 @@ export default function EmissionsPage() {
 
     return Object.entries(categoryTotals).map(([name, amount]) => ({
       name,
-      amount: amount >= 1 ? `${amount.toFixed(1)} tCO₂e` : `${(amount * 1000).toFixed(0)} kg CO₂e`,
+      amount: amount >= 1 ? `${amount.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e` : `${new Decimal(amount).times(1000).toFixed()} kg CO₂e`,
       pct: totalEmissions > 0 ? Math.round((amount / totalEmissions) * 100) : 0,
       color: colors[name] || "bg-[#6B7280]",
     }));
@@ -287,14 +289,14 @@ export default function EmissionsPage() {
   // Top emission sources computed dynamically
   const topSources = useMemo(() => {
     return [...filteredRecords]
-      .sort((a, b) => parseTCO2e(b.emissions) - parseTCO2e(a.emissions))
+      .sort((a, b) => parseTCO2e(b) - parseTCO2e(a))
       .slice(0, 5)
       .map((r, i) => ({
         rank: `0${i + 1}`,
         name: r.activity,
         scope: r.scope,
         emissions: r.emissions,
-        pct: totalEmissions > 0 ? `${Math.round((parseTCO2e(r.emissions) / totalEmissions) * 100)}%` : "0%",
+        pct: totalEmissions > 0 ? `${Math.round((parseTCO2e(r) / totalEmissions) * 100)}%` : "0%",
       }));
   }, [filteredRecords, totalEmissions]);
 
@@ -306,6 +308,7 @@ export default function EmissionsPage() {
       />
 
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+        {Object.keys(linkedFilters).length>0 && <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">Dashboard filters: {linkedFilters.companyId || (linkedFilters.all ? "All companies" : "Selected company")} {linkedFilters.month || "All reporting months"} {linkedFilters.quality || ""} {linkedFilters.record || ""}<button className="underline ml-3" onClick={()=>setLinkedFilters({})}>Clear dashboard filters</button></div>}
 
         {/* Error Alert Banner */}
         {errorNotice && (
@@ -373,6 +376,21 @@ export default function EmissionsPage() {
         {/* Filter Controls Bar */}
         <div className="bg-white p-3.5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
+            {user.role === "ADMIN" && <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E2E8E3] bg-[#F9FAFB]">
+              <select
+                aria-label="Company filter"
+                value={effectiveCompanyId}
+                onChange={event => {
+                  const companyId = event.target.value;
+                  setLoading(true);
+                  setLinkedFilters(previous => ({ ...(previous.month ? { month: previous.month } : {}), ...(previous.quality ? { quality: previous.quality } : {}), ...(companyId ? { companyId } : { all: "1" }) }));
+                }}
+                className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer max-w-56"
+              >
+                <option value="">All Companies</option>
+                {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+              </select>
+            </div>}
             {/* Date Range */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E2E8E3] bg-[#F9FAFB]">
               <Calendar className="w-3.5 h-3.5 text-[#6B7280]" />
@@ -462,7 +480,7 @@ export default function EmissionsPage() {
             </div>
             <div className="my-2 flex items-baseline gap-1.5">
               <span className="text-3xl font-extrabold text-[#111827]">
-                {totalEmissions > 0 ? totalEmissions.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0"}
+                {totalEmissions > 0 ? totalEmissions.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 11 }) : "0"}
               </span>
               <span className="text-xs font-semibold text-[#5F6B61]">tCO₂e</span>
             </div>
@@ -484,7 +502,7 @@ export default function EmissionsPage() {
             </div>
             <div className="my-2 flex items-baseline gap-1.5">
               <span className="text-3xl font-extrabold text-[#111827]">
-                {scope1Total > 0 ? scope1Total.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0"}
+                {scope1Total > 0 ? scope1Total.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 11 }) : "0"}
               </span>
               <span className="text-xs font-semibold text-[#5F6B61]">tCO₂e</span>
             </div>
@@ -501,7 +519,7 @@ export default function EmissionsPage() {
             </div>
             <div className="my-2 flex items-baseline gap-1.5">
               <span className="text-3xl font-extrabold text-[#111827]">
-                {scope2Total > 0 ? scope2Total.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0"}
+                {scope2Total > 0 ? scope2Total.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 11 }) : "0"}
               </span>
               <span className="text-xs font-semibold text-[#5F6B61]">tCO₂e</span>
             </div>
@@ -518,7 +536,7 @@ export default function EmissionsPage() {
             </div>
             <div className="my-2 flex items-baseline gap-1.5">
               <span className="text-3xl font-extrabold text-[#111827]">
-                {scope3Total > 0 ? scope3Total.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0"}
+                {scope3Total > 0 ? scope3Total.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 11 }) : "0"}
               </span>
               <span className="text-xs font-semibold text-[#5F6B61]">tCO₂e</span>
             </div>
@@ -608,13 +626,13 @@ export default function EmissionsPage() {
           {/* Emissions by Scope Donut (5 cols) — Dynamically derived */}
           <div className="lg:col-span-5">
             <ScopeDonutChart
-              total={totalEmissions > 0 ? totalEmissions.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0"}
+              total={totalEmissions > 0 ? totalEmissions.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 11 }) : "0"}
               unit="tCO₂e total"
               title="Emissions by Scope"
               segments={[
-                { scope: "Scope 1", percentage: scope1Pct, amount: `${scope1Total.toFixed(1)} tCO₂e`, color: "#16A34A" },
-                { scope: "Scope 2", percentage: scope2Pct, amount: `${scope2Total.toFixed(1)} tCO₂e`, color: "#0284C7" },
-                { scope: "Scope 3", percentage: scope3Pct, amount: `${scope3Total.toFixed(1)} tCO₂e`, color: "#10B981" },
+                { scope: "Scope 1", percentage: scope1Pct, amount: `${scope1Total.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`, color: "#16A34A" },
+                { scope: "Scope 2", percentage: scope2Pct, amount: `${scope2Total.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`, color: "#0284C7" },
+                { scope: "Scope 3", percentage: scope3Pct, amount: `${scope3Total.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`, color: "#10B981" },
               ]}
               className="h-full"
             />
@@ -699,7 +717,7 @@ export default function EmissionsPage() {
                 <span className="text-xs font-semibold text-[#5F6B61] ml-1">Verified</span>
               </div>
               <p className="text-xs text-[#5F6B61] leading-relaxed">
-                {filteredRecords.filter((r) => r.status !== "Verified").length} records currently pending third-party GHG Protocol audit.
+                {filteredRecords.filter((r) => r.status !== "Verified").length} records currently awaiting internal review.
               </p>
               <div className="w-full h-2 rounded-full bg-[#F3F4F6] overflow-hidden mt-2">
                 <div
@@ -729,12 +747,17 @@ export default function EmissionsPage() {
             error={error}
             onRetry={loadData}
             isAdmin={user.role === "ADMIN"}
+            onReviewRecord={record => setReviewRecordId(record.id)}
             onViewRecord={handleViewRecord}
             onEditRecord={handleEditRecord}
             onDeleteRecord={handleDeleteRecord}
           />
         </div>
       </main>
+
+      {user.role === "ADMIN" && <Modal isOpen={!!reviewRecordId} onClose={() => setReviewRecordId(null)} title="Review emission record" maxWidth="2xl">
+        {reviewRecordId && <EmissionReview key={reviewRecordId} recordId={reviewRecordId} onSaved={() => { void loadData(); }} />}
+      </Modal>}
 
       {/* Add / Edit Emission Modal */}
       <AddEmissionModal

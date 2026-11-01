@@ -11,11 +11,11 @@ import {
   Coins,
   Wallet,
   FileText,
-  Settings,
-  HelpCircle,
   LogOut,
   X,
   Building2,
+  Database,
+  ShieldCheck,
 } from "lucide-react";
 import { authService } from "@/lib/api/auth";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
@@ -31,18 +31,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, selectedCompanyId, companies } = useAuthSession();
+  const { user, selectedCompanyId, companies, isAdminWorkspace } = useAuthSession();
   const activeCompanyName =
     companies.find((c) => c.id === selectedCompanyId)?.name ||
     (selectedCompanyId === "company-b" ? "Company B" : "Company A");
 
-  const navItems = [
+  const navItems = isAdminWorkspace ? [
+    { label: "Admin Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Companies", href: "/companies", icon: Building2 },
+    { label: "Emissions", href: "/emissions", icon: CloudSun },
+    { label: "Emission Factors", href: "/admin/factors", icon: Database },
+    { label: "Offset Projects", href: "/admin/projects", icon: Coins },
+    { label: "Transactions", href: "/admin/transactions", icon: Wallet },
+  ] : [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Emissions", href: "/emissions", icon: CloudSun },
-    ...(user.role === "ADMIN" ? [{ label: "Companies", href: "/companies", icon: Building2 }] : []),
     { label: "Offset Marketplace", href: "/marketplace", icon: Coins },
     { label: "Transactions", href: "/transactions", icon: Wallet },
     { label: "Reports", href: "/reports", icon: FileText },
+    { label: "Scenarios", href: "/scenarios", icon: CloudSun },
   ];
 
   const handleLogout = () => {
@@ -95,33 +102,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Secondary Navigation & Profile */}
-      <div className="p-3 border-t border-[#E5E7EB] space-y-2">
-        <div className="space-y-1">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm font-medium text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] transition-colors"
-          >
-            <Settings className="w-4 h-4 text-[#6B7280]" />
-            <span>Settings</span>
-          </Link>
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm font-medium text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] transition-colors"
-          >
-            <HelpCircle className="w-4 h-4 text-[#6B7280]" />
-            <span>Help & Support</span>
-          </Link>
-        </div>
+      {isAdminWorkspace && <div className="px-4 pb-3 border-t border-slate-100 pt-3">
+        <Link href="/admin/audit" onClick={onCloseMobile} className="flex items-center gap-2 text-xs text-slate-600 hover:text-green-800"><ShieldCheck size={15} />Audit Logs</Link>
+      </div>}
 
-        <div className="pt-2 border-t border-[#E5E7EB] flex items-center justify-between px-2">
+      {/* Profile */}
+      <div className="p-3 border-t border-[#E5E7EB]">
+        <div className="flex items-center justify-between px-2">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-full bg-[#E8F5E9] flex items-center justify-center text-xs font-bold text-[#2E7D32] border border-[#C8E6C9] flex-shrink-0">
               {user.role === "ADMIN" ? "AD" : user.email.slice(0, 2).toUpperCase()}
             </div>
             <div className="overflow-hidden">
               <p className="text-xs font-semibold text-[#111827] truncate">{user.role === "ADMIN" ? "Administrator" : user.email}</p>
-              <p className="text-[10px] text-[#6B7280] truncate">{user.role === "ADMIN" ? "Admin" : activeCompanyName}</p>
+              <p className="text-[10px] text-[#6B7280] truncate">{isAdminWorkspace ? "Admin workspace" : activeCompanyName}</p>
             </div>
           </div>
           <button

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Company } from "@/types";
 import { companiesApi } from "@/lib/api/companies";
+import { ApiError } from "@/lib/api/client";
 import { Building2, Mail, Lock, AlertCircle } from "lucide-react";
 
 interface EditCompanyModalProps {
@@ -28,6 +29,7 @@ const EditCompanyForm: React.FC<EditCompanyFormProps> = ({
 }) => {
   const [name, setName] = useState(company.name || "");
   const [email, setEmail] = useState(company.userEmail || "");
+  const [monthlyLimit, setMonthlyLimit] = useState(company.monthlyEmissionsLimit || "");
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -56,12 +58,15 @@ const EditCompanyForm: React.FC<EditCompanyFormProps> = ({
       const updated = await companiesApi.updateCompany(company.id, {
         name: name.trim(),
         email: email.trim(),
+        monthlyEmissionsLimit: monthlyLimit.trim() || null,
       });
       onSuccess(updated, "Company account updated successfully.");
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unable to update company account.";
-      if (msg.includes("already registered")) {
+      if (err instanceof ApiError && err.details) {
+        setFieldErrors(err.details);
+      } else if (msg.includes("already registered")) {
         setFieldErrors({ email: "This email is already registered." });
       } else if (msg.includes("already exists")) {
         setFieldErrors({ name: "A company with this name already exists." });
@@ -111,6 +116,23 @@ const EditCompanyForm: React.FC<EditCompanyFormProps> = ({
         errorMessage={fieldErrors.email}
         disabled={submitting}
         helperText="This email will be required for the company user to log in."
+      />
+
+      <Input
+        label="Monthly emissions warning threshold (tCO2e)"
+        type="number"
+        min="0.00000000001"
+        max="9999999999999.99999999999"
+        step="any"
+        value={monthlyLimit}
+        onChange={(e) => {
+          setMonthlyLimit(e.target.value);
+          setFieldErrors((previous) => ({ ...previous, monthlyEmissionsLimit: "" }));
+        }}
+        errorMessage={fieldErrors.monthlyEmissionsLimit}
+        placeholder="e.g. 10"
+        disabled={submitting}
+        helperText="Warn at 80%; alert at 100%. Uses gross monthly emissions before offsets. Leave blank to disable."
       />
 
       {/* Read-Only Tenant ID */}

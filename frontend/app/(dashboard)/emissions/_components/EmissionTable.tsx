@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo } from "react";
 import { EmissionRecord } from "@/types";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils/cn";
@@ -25,6 +24,7 @@ interface EmissionTableProps {
   error?: string | null;
   onRetry?: () => void;
   isAdmin?: boolean;
+  onReviewRecord?: (record: EmissionRecord) => void;
   onViewRecord: (record: EmissionRecord) => void;
   onEditRecord?: (record: EmissionRecord) => void;
   onDeleteRecord?: (record: EmissionRecord) => Promise<void>;
@@ -57,6 +57,7 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
   error = null,
   onRetry,
   isAdmin = false,
+  onReviewRecord,
   onViewRecord,
   onEditRecord,
   onDeleteRecord,
@@ -71,31 +72,9 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const getStatusVariant = (status: EmissionRecord["status"]) => {
-    switch (status) {
-      case "Verified":
-        return "success";
-      case "Pending":
-        return "warning";
-      case "Needs Review":
-        return "danger";
-      default:
-        return "neutral";
-    }
-  };
 
-  const getScopeVariant = (scope: EmissionRecord["scope"]) => {
-    switch (scope) {
-      case "Scope 1":
-        return "scope1";
-      case "Scope 2":
-        return "scope2";
-      case "Scope 3":
-        return "scope3";
-      default:
-        return "neutral";
-    }
-  };
+
+
 
   // Filter records locally
   const filteredRecords = useMemo(() => {
@@ -262,18 +241,23 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
             <p className="text-[11px] text-[#6B7280]">Try adjusting your search query or filters.</p>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse text-xs min-w-[850px]" aria-label="Recent emissions records">
+          <table className="w-full table-fixed text-left border-collapse text-xs min-w-[1000px]" aria-label="Recent emissions records">
+            <colgroup>
+              <col className="w-[12%]" />
+              <col className="w-[28%]" />
+              <col className="w-[18%]" />
+              <col className="w-[14%]" />
+              <col className="w-[14%]" />
+              <col className="w-[14%]" />
+            </colgroup>
             <thead>
               <tr className="bg-[#F9FAFB] text-[#6B7280] font-semibold uppercase tracking-wider border-b border-[#E5E7EB]">
                 <th scope="col" className="py-3.5 px-4">Date</th>
                 <th scope="col" className="py-3.5 px-4">Activity</th>
-                <th scope="col" className="py-3.5 px-4">Scope</th>
                 <th scope="col" className="py-3.5 px-4">Category</th>
-                <th scope="col" className="py-3.5 px-4">Quantity / Input</th>
-                <th scope="col" className="py-3.5 px-4">Facility</th>
-                <th scope="col" className="py-3.5 px-4">Emissions</th>
-                <th scope="col" className="py-3.5 px-4">Status</th>
-                <th scope="col" className="py-3.5 px-4 text-right">Actions</th>
+                <th scope="col" className="py-3.5 px-4 text-right">Quantity / Input</th>
+                <th scope="col" className="py-3.5 px-4 text-right">Emissions</th>
+                <th scope="col" className="py-3.5 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F3F4F6]">
@@ -294,47 +278,29 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
                     </td>
 
                     {/* Activity */}
-                    <td className="py-3.5 px-4 font-semibold text-[#111827] max-w-[220px] truncate" title={rec.activity}>
+                    <td className="py-3.5 px-4 font-semibold text-[#111827] whitespace-normal break-words leading-5" title={rec.activity}>
                       {rec.activity}
-                    </td>
-
-                    {/* Scope */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <Badge variant={getScopeVariant(rec.scope)}>
-                        {rec.scope}
-                      </Badge>
+                      {rec.reviewComment && <p className="text-[11px] font-normal text-slate-500 mt-1">Review: {rec.reviewComment}</p>}
                     </td>
 
                     {/* Category */}
-                    <td className="py-3.5 px-4 text-[#4B5563] whitespace-nowrap">
+                    <td className="py-3.5 px-4 text-[#4B5563] whitespace-normal break-words leading-5">
                       {rec.category}
                     </td>
 
                     {/* Quantity / Input */}
-                    <td className="py-3.5 px-4 text-[#4B5563] whitespace-nowrap font-mono">
+                    <td className="py-3.5 px-4 text-[#4B5563] whitespace-nowrap text-right tabular-nums">
                       {rec.quantity}
                     </td>
 
-                    {/* Facility */}
-                    <td className="py-3.5 px-4 text-[#4B5563] max-w-[160px] truncate" title={rec.facility || "—"}>
-                      {rec.facility || "—"}
-                    </td>
-
                     {/* Emissions */}
-                    <td className="py-3.5 px-4 font-bold text-[#111827] whitespace-nowrap">
+                    <td className="py-3.5 px-4 font-bold text-[#111827] whitespace-nowrap text-right tabular-nums">
                       {rec.emissions}
                     </td>
 
-                    {/* Status */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <Badge variant={getStatusVariant(rec.status)}>
-                        {rec.status}
-                      </Badge>
-                    </td>
-
                     {/* Actions */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <div className="flex flex-wrap items-center justify-center gap-2">
                         {/* View Details — Accessible to both Company User and Admin */}
                         <Button
                           variant="outline"
@@ -346,6 +312,7 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
                           View
                         </Button>
 
+                        {isAdmin && onReviewRecord && <button type="button" className="rounded-lg border border-green-200 bg-green-50 px-2 py-1.5 text-green-800 text-xs hover:bg-green-100" onClick={() => onReviewRecord(rec)}>Review</button>}
                         {/* Edit & Delete — COMPANY USER only */}
                         {!isAdmin && (
                           <>

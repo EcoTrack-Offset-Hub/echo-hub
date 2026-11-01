@@ -6,14 +6,10 @@ import { AuthenticatedUser, Company } from "@/types";
 import { getAuthenticatedUser, getAuthToken, logout as clearSession } from "./session";
 import { companiesApi } from "@/lib/api/companies";
 
-const DEFAULT_COMPANIES: Company[] = [
-  { id: "company-a", name: "Company A" },
-  { id: "company-b", name: "Company B" },
-];
-
 interface AuthContextValue {
   user: AuthenticatedUser;
   selectedCompanyId: string;
+  isAdminWorkspace: boolean;
   setSelectedCompanyId: (id: string) => void;
   companies: Company[];
   refreshCompanies: () => Promise<void>;
@@ -32,17 +28,17 @@ export function AuthSessionProvider({
   onInvalidSession: () => void;
 }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [selectedCompanyId, setSelectedCompany] = useState<string>("company-a");
-  const [companies, setCompanies] = useState<Company[]>(DEFAULT_COMPANIES);
+  const [selectedCompanyId, setSelectedCompany] = useState<string>("");
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   const refreshCompanies = useCallback(async () => {
     try {
       const data = await companiesApi.getCompanies();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setCompanies(data);
       }
     } catch {
-      // Fallback to default companies if unable to fetch
+      // Keep the last successfully loaded company list; never fabricate tenants.
     }
   }, []);
 
@@ -55,11 +51,11 @@ export function AuthSessionProvider({
       }
 
       setUser(authenticatedUser);
-      const savedCompanyId = window.localStorage.getItem(companyKey);
+      const savedCompanyId = window.sessionStorage.getItem(companyKey);
       const companyId =
         authenticatedUser.role === "COMPANY_USER"
           ? (authenticatedUser.companyId || "company-a")
-          : savedCompanyId || "company-a";
+          : savedCompanyId || "";
       setSelectedCompany(companyId);
 
       if (authenticatedUser.role === "ADMIN") {
@@ -77,9 +73,10 @@ export function AuthSessionProvider({
     return {
       user,
       selectedCompanyId,
+      isAdminWorkspace: user.role === "ADMIN" && !selectedCompanyId,
       setSelectedCompanyId: (id: string) => {
-        if (user.role === "ADMIN" && id && typeof id === "string") {
-          window.localStorage.setItem(companyKey, id);
+        if (user.role === "ADMIN" && typeof id === "string") {
+          window.sessionStorage.setItem(companyKey, id);
           setSelectedCompany(id);
         }
       },
