@@ -12,7 +12,7 @@
     "test:postman": "node tests/run-postman-collection.js",
     "test:admin": "node tests/admin-dashboard.test.js",
     "test:admin:live": "node --use-system-ca tests/admin-dashboard-live.test.js",
-    "test:trust": "node tests/trust-and-scenarios.test.js",
+    "test:trust": "node tests/trust-and-records.test.js",
     "test:concurrency": "node --use-system-ca tests/purchase-concurrency.test.js",
     "test:threshold": "node tests/emissions-threshold.test.js",
     "test:operations": "node tests/admin-operations.test.js",

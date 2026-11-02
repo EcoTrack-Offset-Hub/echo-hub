@@ -5,7 +5,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { calculateEmissions } = require('../services/calculationEngine');
 const { creditQuantity } = require('../services/precision');
-const { simulate } = require('../services/scenarios');
 async function run() {
   const input = { category: 'Purchased Electricity', unit: 'kWh', consumption: '1', reportingPeriod: '2026-10', facility: 'HQ' };
   assert.equal(calculateEmissions(input).resultTonnesExact, '0.00042');
@@ -16,12 +15,6 @@ async function run() {
   assert.throws(() => calculateEmissions({ ...input, consumption: Infinity }));
   assert.throws(() => creditQuantity('0.001'));
   assert.throws(() => creditQuantity('-1'));
-  const records = [{ id: 'a', category: 'Fleet & Fuel', result_kg: '100', factor_version_id: 1 }, { id: 'b', category: 'Purchased Electricity', result_kg: '50', factor_version_id: 2 }];
-  const results = simulate(records, [{ category: 'Fleet & Fuel', affectedPercent: '30', reductionPercent: '80' }]);
-  assert.equal(results.projectedKg, '126');
-  assert.equal(results.savedKg, '24');
-  assert.equal(results.baselineRecords[0].factorVersionId, 1);
-  assert.throws(() => simulate(records, [{ category: 'Fleet & Fuel', affectedPercent: '101', reductionPercent: '80' }]));
   const db = new PGlite();
   for (const file of ['001_auth_company_emissions.sql', '002_marketplace_and_transactions.sql', '003_company_status.sql', '004_admin_dashboard.sql', '006_trustworthy_calculations.sql', '007_company_emissions_threshold.sql', '008_admin_operations.sql'])
     await db.exec(fs.readFileSync(path.join(__dirname, '../migrations', file), 'utf8'));
@@ -60,32 +53,8 @@ async function run() {
   assert.equal(Number(legacy.result_tonnes), 0.42);
   assert.equal(legacy.status, 'Needs Review');
   assert.equal(Number(legacy.activity_amount), 1);
-  process.env.AUTH_JWT_SECRET = 'isolated-trust-scenario-secret-at-least-32';
-  const { app } = require('../server');
-  const { signToken } = require('../middleware/auth');
-  const server = app.listen(0);
-  await new Promise(resolve => server.once('listening', resolve));
-  const token = signToken({ id: 'u', role: 'COMPANY_USER', companyId: 'test' });
-  const url = `http://localhost:${server.address().port}/api/scenarios`;
-  try {
-    assert.equal((await fetch(url)).status, 401);
-    assert.equal((await fetch(url + '?companyId=another', { headers: { Authorization: `Bearer ${token}` } })).status, 403);
-    const body = { name: 'Electricity plan', period: '2026-10', changes: [{ category: input.category, affectedPercent: '100', reductionPercent: '15' }], save: true };
-    let response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    assert.equal(response.status, 200);
-    assert.equal((await response.json()).data.results.projectedKg, '0.357');
-    response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const savedScenarios = (await response.json()).data;
-    assert.equal(savedScenarios.length, 1);
-    // A later edit cannot alter the saved baseline snapshot.
-    await db.query("UPDATE emissions SET result_kg=100 WHERE id='e'");
-    assert.equal(savedScenarios[0].results.baselineKg, '0.42');
-    response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, expectedBaseline: savedScenarios[0].results.baselineRecords }) });
-    assert.equal(response.status, 409);
-  } finally { await new Promise(resolve => server.close(resolve)); }
   await assert.rejects(data.deleteCompany('test'), /Deactivate the company/);
-  assert.equal((await db.query('SELECT count(*)::int AS count FROM scenarios')).rows[0].count, 1);
   await db.close();
-  console.log('Trust and scenario tests passed (units, precision, audit snapshot, simulation, purchases, rollback, reports, dashboard).');
+  console.log('Trust and records tests passed (units, precision, audit snapshot, purchases, rollback, reports, dashboard).');
 }
 run().catch(e => { console.error(e); process.exit(1); });

@@ -158,7 +158,6 @@ function recordFromCalculation(calculation, companyId) {
   };
 }
 
-require("./services/scenarios").registerScenarios(app, { requireAuth, resolveCompany, getDb });
 require("./services/notifications")(app);
 
 // Public health check for Postman, deployment checks, and local testing.
