@@ -60,7 +60,7 @@ try {
   else results.push({id:'BROWSER-SETUP',title:'Browser case mapping',kind:'Runner',status:'FAIL',coverage:'Browser execution',detail:'Missing TC-05.4 mapping',durationMs:browserRun.durationMs});
   suite('REG-ADMIN','Admin dashboard and management','admin-dashboard.test.js');
   suite('REG-THRESHOLD','Company warning thresholds','emissions-threshold.test.js');
-  suite('REG-TRUST','Calculation precision, scenarios and purchases','trust-and-scenarios.test.js');
+  suite('REG-TRUST','Calculation precision, records and purchases','trust-and-records.test.js');
   suite('REG-OPERATIONS','Admin reviews, restocking, sessions and notifications','admin-operations.test.js');
   if (live) {
     suite('LIVE-READ','Read-only configured database dashboard checks','admin-dashboard-live.test.js');

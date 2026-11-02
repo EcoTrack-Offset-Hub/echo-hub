@@ -12,7 +12,7 @@ export default function HelpPage() {
           <h2 id="admin-workspace-guide" className="font-bold">Your role as administrator</h2>
           <p className="text-sm text-slate-600 mt-2">
             Monitor all companies, maintain calculation factors and certified project information,
-            and review records. Companies enter their activities, purchase offsets, and model reduction scenarios in their own workspace.
+            and review records. Companies enter their activities, view emissions reports, and purchase offsets in their own workspace.
           </p>
           <p className="text-xs text-slate-500 mt-2">
             The reporting month controls emissions, data quality, threshold alerts, and attention checks.

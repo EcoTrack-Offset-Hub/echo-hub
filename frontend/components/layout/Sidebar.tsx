@@ -49,7 +49,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { label: "Offset Marketplace", href: "/marketplace", icon: Coins },
     { label: "Transactions", href: "/transactions", icon: Wallet },
     { label: "Reports", href: "/reports", icon: FileText },
-    { label: "Scenarios", href: "/scenarios", icon: CloudSun },
   ];
 
   const handleLogout = () => {
