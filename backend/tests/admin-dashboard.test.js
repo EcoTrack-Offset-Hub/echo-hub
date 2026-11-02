@@ -496,6 +496,20 @@ async function run() {
       await db.query("SELECT count(*)::int AS count FROM audit_events")
     ).rows[0].count;
     check(() => assert.equal(auditAfter, auditBefore));
+    // Verify actual wire compression without changing JSON values or authorisation.
+    const wire = encoding => new Promise((resolve,reject) => {
+      require('node:http').get(base+'/api/admin/audit?limit=50',{headers:{Authorization:'Bearer '+admin,'Accept-Encoding':encoding}},response=>{
+        const chunks=[];response.on('data',chunk=>chunks.push(chunk));response.on('end',()=>resolve({status:response.statusCode,headers:response.headers,body:Buffer.concat(chunks)}));response.on('error',reject);
+      }).on('error',reject);
+    });
+    const identity=await wire('identity'), gzip=await wire('gzip');
+    check(()=>assert.equal(gzip.status,200));
+    check(()=>assert.equal(gzip.headers['content-encoding'],'gzip'));
+    check(()=>assert.deepEqual(require('node:zlib').gunzipSync(gzip.body),identity.body));
+    check(()=>assert(gzip.body.length<identity.body.length));
+    const preflight=await fetch(base+'/api/emissions',{method:'OPTIONS',headers:{Origin:'http://localhost:3000','Access-Control-Request-Method':'GET','Access-Control-Request-Headers':'authorization'}});
+    check(()=>assert.equal(preflight.headers.get('access-control-max-age'),'600'));
+    console.log(`Transport: ${identity.body.length} bytes reduced to ${gzip.body.length} bytes with identical JSON.`);
     console.log(`PASS: ${checks} isolated admin dashboard integration checks`);
   } finally {
     await new Promise((r) => server.close(r));

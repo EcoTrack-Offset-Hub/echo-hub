@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -10,8 +11,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
 import { companiesApi } from "@/lib/api/companies";
-import { EditCompanyModal } from "./_components/EditCompanyModal";
-import { ResetPasswordModal } from "./_components/ResetPasswordModal";
+const EditCompanyModal = dynamic(() => import("./_components/EditCompanyModal").then(module => module.EditCompanyModal));
+const ResetPasswordModal = dynamic(() => import("./_components/ResetPasswordModal").then(module => module.ResetPasswordModal));
 import {
   Building2,
   Plus,
@@ -86,7 +87,7 @@ export default function CompaniesPage() {
     return (
       <div className="flex-1 flex flex-col min-h-screen">
         <Header title="Companies" subtitle="Tenant administration" />
-        <main className="flex-1 p-6 sm:p-12 flex items-center justify-center">
+        <main id="page-content" tabIndex={-1} className="flex-1 p-6 sm:p-12 flex items-center justify-center">
           <div className="max-w-md w-full bg-white p-8 rounded-2xl border border-[#E2E8E3] shadow-sm text-center space-y-4">
             <div className="w-14 h-14 mx-auto rounded-full bg-[#FEE2E2] flex items-center justify-center text-[#DC2626]">
               <ShieldAlert className="w-7 h-7" />
@@ -208,7 +209,7 @@ export default function CompaniesPage() {
     <div className="flex-1 flex flex-col min-h-screen">
       <Header title="Companies" subtitle="Company & Tenant Management" />
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+      <main id="page-content" tabIndex={-1} className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
 
         {/* Success Alert Banner */}
         {successMessage && (
@@ -298,7 +299,7 @@ export default function CompaniesPage() {
                               Monthly limit: {comp.monthlyEmissionsLimit ? `${Number(comp.monthlyEmissionsLimit).toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e` : "Not configured"}
                             </p>
                             {isActive && (
-                              <span className="ml-2 text-[10px] bg-[#DCFCE7] text-[#16A34A] px-1.5 py-0.5 rounded-full font-bold">
+                              <span className="ml-2 text-[10px] bg-[#DCFCE7] text-[#15803D] px-1.5 py-0.5 rounded-full font-bold">
                                 Current Active Org
                               </span>
                             )}
@@ -311,11 +312,11 @@ export default function CompaniesPage() {
                       <td className="px-6 py-4 text-[#374151]">
                         {comp.userEmail ? (
                           <div className="flex items-center gap-1.5">
-                            <Mail className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                            <Mail className="w-3.5 h-3.5 text-[#6B7280]" />
                             <span>{comp.userEmail}</span>
                           </div>
                         ) : (
-                          <span className="text-[#9CA3AF] italic">Default Tenant User</span>
+                          <span className="text-[#6B7280] italic">Default Tenant User</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
@@ -414,7 +415,7 @@ export default function CompaniesPage() {
         </div>
       </main>
 
-      <EditCompanyModal
+      {Boolean(editingCompany) && (<EditCompanyModal
         isOpen={Boolean(editingCompany)}
         onClose={() => setEditingCompany(null)}
         company={editingCompany}
@@ -422,14 +423,14 @@ export default function CompaniesPage() {
           await refreshCompanies();
           setSuccessMessage(message);
         }}
-      />
+      />)}
 
-      <ResetPasswordModal
+      {Boolean(resettingPasswordFor) && (<ResetPasswordModal
         isOpen={Boolean(resettingPasswordFor)}
         onClose={() => setResettingPasswordFor(null)}
         company={resettingPasswordFor}
         onSuccess={(message) => setSuccessMessage(message)}
-      />
+      />)}
 
       <Modal
         isOpen={Boolean(statusCompany)}

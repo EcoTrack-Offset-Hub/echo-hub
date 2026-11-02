@@ -188,7 +188,7 @@ export function AdminDashboard() {
         subtitle="Platform-wide sustainability and marketplace oversight"
 
       />
-      <main
+      <main id="page-content" tabIndex={-1}
         className="p-4 sm:p-5 lg:p-6 space-y-5 max-w-[1600px] mx-auto"
         aria-busy={loading}
       >
@@ -487,7 +487,7 @@ export function AdminDashboard() {
               <Panel title="Emissions Across Companies" className="flex flex-col">
                 <div className="flex flex-wrap justify-between items-center gap-3 text-xs text-slate-500">
                   <span>Monthly total emissions (tCO₂e)</span>
-                  <div className="bg-slate-100 rounded-lg p-1 flex">
+                  <div className="bg-slate-100 text-slate-600 rounded-lg p-1 flex">
                     {["3M", "6M", "12M"].map((r) => (
                       <button
                         aria-pressed={r === range}
@@ -496,7 +496,7 @@ export function AdminDashboard() {
                           change();
                           setRange(r);
                         }}
-                        className={`px-3 py-1.5 rounded-md ${r === range ? "bg-green-600 text-white" : ""}`}
+                        className={`px-3 py-1.5 rounded-md ${r === range ? "bg-green-700 text-white" : ""}`}
                       >
                         {r}
                       </button>
@@ -515,7 +515,7 @@ export function AdminDashboard() {
                       <svg
                         viewBox="0 0 600 240"
                         className="w-full h-auto max-h-80"
-                        role="img"
+                        role="group"
                         aria-label="Monthly emissions across selected companies"
                       >
                         {[0, 1, 2, 3, 4].map((i) => (
@@ -595,6 +595,8 @@ export function AdminDashboard() {
                             height="190"
                             fill="transparent"
                             tabIndex={0}
+                            role="button"
+                            onKeyDown={event => { if (event.key === "Escape") setHover(null); if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setHover(i); } }}
                             aria-label={`${mo}: ${data.trend?.map((s) => s.name + " " + fmt(s.values[i]) + " tCO₂e").join(", ")}`}
                             onMouseEnter={() => setHover(i)}
                             onMouseLeave={() => setHover(null)}

@@ -56,7 +56,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMen
               <button
                 onClick={() => setOrgMenuOpen(!orgMenuOpen)}
                 aria-expanded={orgMenuOpen}
-                aria-label="Select dashboard or company workspace"
+                aria-label={`Org: ${getCompanyName(selectedCompanyId)} - Select workspace`}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E2E8E3] bg-[#F9FAFB] hover:bg-[#F3F4F6] text-xs font-semibold text-[#111827] transition-colors cursor-pointer"
               >
                 <Building2 className="w-3.5 h-3.5 text-[#2E7D32]" />
@@ -94,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMen
                     >
                       <span>{c.name}</span>
                       {c.id === selectedCompanyId && (
-                        <span className="text-[10px] bg-[#DCFCE7] text-[#16A34A] px-1.5 py-0.5 rounded-full font-bold">
+                        <span className="text-[10px] bg-[#DCFCE7] text-[#15803D] px-1.5 py-0.5 rounded-full font-bold">
                           Active
                         </span>
                       )}
@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, onOpenMobileMen
           className="flex items-center gap-2 pl-2 border-l border-[#E5E7EB]"
           title={`${user.email} — ${label}`}
         >
-          <button aria-label="Admin profile menu" onClick={()=>setProfileOpen(!profileOpen)} className="w-8 h-8 rounded-full bg-[#E8F5E9] flex items-center justify-center text-xs font-bold text-[#2E7D32] border border-[#C8E6C9]">
+          <button aria-label={`${initial} - ${label} profile menu`} onClick={()=>setProfileOpen(!profileOpen)} className="w-8 h-8 rounded-full bg-[#E8F5E9] flex items-center justify-center text-xs font-bold text-[#2E7D32] border border-[#C8E6C9]">
             {initial}
           </button>
           {profileOpen && <div className="absolute right-4 top-14 bg-white p-4 rounded-xl border shadow-lg text-xs"><p>{user.email}</p><a href="/settings" className="block mt-3 text-green-700">Account settings</a></div>}

@@ -20,8 +20,8 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("companyA@demo.ecotrack");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -56,7 +56,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col md:flex-row bg-white">
+    <main id="page-content" tabIndex={-1} className="min-h-screen w-full flex flex-col md:flex-row bg-white">
       {/* ========================================================================= */}
       {/* LEFT PANEL: Environmental Illustration & 5 Carbon Cycle Satellites        */}
       {/* ========================================================================= */}
@@ -144,7 +144,7 @@ export default function LoginPage() {
 
             {/* Node 3: Transportation (Right) */}
             <div className="absolute right-0 top-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-xl shadow-md border border-[#E2E8E3] flex items-center gap-2 text-left">
-              <div className="w-7 h-7 rounded-lg bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-[#E0F2FE] text-[#0369A1] flex items-center justify-center">
                 <Truck className="w-4 h-4" />
               </div>
               <div>
@@ -155,7 +155,7 @@ export default function LoginPage() {
 
             {/* Node 4: Sustainability (Bottom-Right) */}
             <div className="absolute bottom-2 right-4 bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-xl shadow-md border border-[#E2E8E3] flex items-center gap-2 text-left">
-              <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] text-[#15803D] flex items-center justify-center">
                 <Leaf className="w-4 h-4" />
               </div>
               <div>
@@ -212,42 +212,46 @@ export default function LoginPage() {
           <form onSubmit={handleSignIn} className="space-y-5">
             {/* Email Field */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-[#374151]">
+              <label htmlFor="login-email" className="block text-xs font-semibold text-[#374151]">
                 Email address
               </label>
               <div className="relative flex items-center">
-                <Mail className="absolute left-3.5 w-4 h-4 text-[#9CA3AF] pointer-events-none" />
+                <Mail className="absolute left-3.5 w-4 h-4 text-[#6B7280] pointer-events-none" />
                 <input
+                  id="login-email"
+                  autoComplete="username"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E2E8E3] bg-white text-sm text-[#111827] placeholder:text-[#9CA3AF] shadow-xs outline-hidden focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32] transition-colors"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E2E8E3] bg-white text-sm text-[#111827] placeholder:text-[#6B7280] shadow-xs outline-hidden focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32] transition-colors"
                 />
               </div>
             </div>
 
             {/* Password Field */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-[#374151]">
+              <label htmlFor="login-password" className="block text-xs font-semibold text-[#374151]">
                 Password
               </label>
               <div className="relative flex items-center">
-                <Lock className="absolute left-3.5 w-4 h-4 text-[#9CA3AF] pointer-events-none" />
+                <Lock className="absolute left-3.5 w-4 h-4 text-[#6B7280] pointer-events-none" />
                 <input
+                  id="login-password"
+                  autoComplete="current-password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-[#E2E8E3] bg-white text-sm text-[#111827] placeholder:text-[#9CA3AF] shadow-xs outline-hidden focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32] transition-colors"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-[#E2E8E3] bg-white text-sm text-[#111827] placeholder:text-[#6B7280] shadow-xs outline-hidden focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32] transition-colors"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-3.5 text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
+                  className="absolute right-1.5 p-2 text-[#6B7280] hover:text-[#4B5563] cursor-pointer"
                 >
                   {showPassword ? (
                     <EyeOff className="w-4 h-4" />
@@ -275,7 +279,7 @@ export default function LoginPage() {
                 onClick={() =>
                   alert("Please contact your organization administrator to reset your corporate single sign-on credentials.")
                 }
-                className="font-medium text-[#2E7D32] hover:text-[#1B5E20] hover:underline"
+                className="min-h-11 px-2 font-medium text-[#2E7D32] hover:text-[#1B5E20] hover:underline"
               >
                 Forgot password?
               </button>
@@ -304,6 +308,6 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

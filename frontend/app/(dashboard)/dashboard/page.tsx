@@ -2,10 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import dynamic from "next/dynamic";
+const AdminDashboard = dynamic(() => import("@/components/admin/AdminDashboard").then(module => module.AdminDashboard), { loading: () => <div role="status" className="p-8">Loading admin overview...</div> });
 import { Header } from "@/components/layout/Header";
 import { EmissionsThresholdNotice } from "@/components/charts/EmissionsThresholdNotice";
-import { EmissionsTrendChart } from "@/components/charts/EmissionsTrendChart";
+const EmissionsTrendChart = dynamic(() => import("@/components/charts/EmissionsTrendChart").then(module => module.EmissionsTrendChart), {
+  loading: () => <div role="status" className="min-h-[320px] rounded-2xl border border-[#E2E8E3] bg-white p-5 text-sm text-[#5F6B61]">Loading emissions trend...</div>,
+});
 import { dashboardApi, CompanyDashboardData } from "@/lib/api/dashboard";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
 import {
@@ -89,7 +92,7 @@ function CompanyDashboard() {
     <div className="flex-1 flex flex-col min-h-screen bg-[#F9FAF9]">
       <Header title="Dashboard" subtitle="Sustainability overview" />
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-5 max-w-7xl mx-auto w-full">
+      <main id="page-content" tabIndex={-1} className="flex-1 p-4 sm:p-6 lg:p-8 space-y-5 max-w-7xl mx-auto w-full">
 
         {/* Welcome Section & Period Selector */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -244,7 +247,7 @@ function CompanyDashboard() {
                   </div>
 
                   <div className="flex items-center gap-1 text-[#6B7280] text-[11px]">
-                    <FileText className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                    <FileText className="w-3.5 h-3.5 text-[#6B7280]" />
                     <span>Based on {emissions?.recordCount || 0} activity records</span>
                   </div>
                 </div>
@@ -264,7 +267,7 @@ function CompanyDashboard() {
                   {/* Scope 1 */}
                   <div className="p-2 rounded-xl bg-[#F8FAF8] border border-[#E8ECE8]">
                     <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-[#5F6B61] mb-1">
-                      <Flame className="w-3 h-3 text-[#16A34A]" />
+                      <Flame className="w-3 h-3 text-[#15803D]" />
                       <span>Scope 1</span>
                     </div>
                     <p className="text-base font-extrabold text-[#111827]">
@@ -279,7 +282,7 @@ function CompanyDashboard() {
                   {/* Scope 2 */}
                   <div className="p-2 rounded-xl bg-[#F0FDF4] border border-[#DCFCE7]">
                     <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-[#166534] mb-1">
-                      <Zap className="w-3 h-3 text-[#0284C7]" />
+                      <Zap className="w-3 h-3 text-[#0369A1]" />
                       <span>Scope 2</span>
                     </div>
                     <p className="text-base font-extrabold text-[#111827]">
@@ -294,7 +297,7 @@ function CompanyDashboard() {
                   {/* Scope 3 */}
                   <div className="p-2 rounded-xl bg-[#F8FAF8] border border-[#E8ECE8]">
                     <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-[#5F6B61] mb-1">
-                      <Truck className="w-3 h-3 text-[#16A34A]" />
+                      <Truck className="w-3 h-3 text-[#15803D]" />
                       <span>Scope 3</span>
                     </div>
                     <p className="text-base font-extrabold text-[#111827]">
@@ -497,7 +500,7 @@ function CompanyDashboard() {
                     {/* Credits Purchased */}
                     <div className="p-3.5 rounded-xl bg-[#F8FAF8] border border-[#E2E8E3]">
                       <div className="flex items-center gap-1.5 text-xs text-[#5F6B61] font-medium mb-1">
-                        <div className="w-5 h-5 rounded-md bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+                        <div className="w-5 h-5 rounded-md bg-[#E0F2FE] text-[#0369A1] flex items-center justify-center">
                           <Coins className="w-3 h-3" />
                         </div>
                         <span>Credits Purchased</span>
@@ -529,7 +532,7 @@ function CompanyDashboard() {
                     {/* Net Emissions */}
                     <div className="p-3.5 rounded-xl bg-[#F8FAF8] border border-[#E2E8E3]">
                       <div className="flex items-center gap-1.5 text-xs text-[#5F6B61] font-medium mb-1">
-                        <div className="w-5 h-5 rounded-md bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center">
+                        <div className="w-5 h-5 rounded-md bg-[#DCFCE7] text-[#15803D] flex items-center justify-center">
                           <Leaf className="w-3 h-3" />
                         </div>
                         <span>Net Emissions</span>
@@ -537,7 +540,7 @@ function CompanyDashboard() {
                       <p className="text-lg font-extrabold text-[#111827]">
                         {offsets?.netEmissions !== undefined ? offsets.netEmissions.toLocaleString(undefined, { maximumFractionDigits: 11 }) : "0"} tCO₂e
                       </p>
-                      <p className="text-[10px] text-[#16A34A] font-semibold mt-0.5">
+                      <p className="text-[10px] text-[#15803D] font-semibold mt-0.5">
                         {offsets?.netSubtext || "Same as gross (no offsets)"}
                       </p>
                     </div>
@@ -582,7 +585,7 @@ function CompanyDashboard() {
                         <p className="text-[11px] text-[#5F6B61]">Add electricity, fuel or travel data</p>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-[#9CA3AF] group-hover:text-[#2E7D32] transition-colors" />
+                    <ChevronRight className="w-4 h-4 text-[#6B7280] group-hover:text-[#2E7D32] transition-colors" />
                   </Link>
 
                   {/* Action 2: View Calculation Details */}
@@ -591,7 +594,7 @@ function CompanyDashboard() {
                     className="p-3 rounded-xl border border-[#E2E8E3] hover:border-[#0284C7] hover:bg-[#F0F9FF] transition-all flex items-center justify-between group cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center group-hover:bg-[#0284C7] group-hover:text-white transition-colors">
+                      <div className="w-8 h-8 rounded-lg bg-[#E0F2FE] text-[#0369A1] flex items-center justify-center group-hover:bg-[#0284C7] group-hover:text-white transition-colors">
                         <Calculator className="w-4 h-4" />
                       </div>
                       <div>
@@ -599,7 +602,7 @@ function CompanyDashboard() {
                         <p className="text-[11px] text-[#5F6B61]">See how your emissions are calculated</p>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-[#9CA3AF] group-hover:text-[#0284C7] transition-colors" />
+                    <ChevronRight className="w-4 h-4 text-[#6B7280] group-hover:text-[#0369A1] transition-colors" />
                   </Link>
 
                   {/* Action 3: Explore Offset Projects */}
@@ -616,7 +619,7 @@ function CompanyDashboard() {
                         <p className="text-[11px] text-[#5F6B61]">Browse verified carbon credit projects</p>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-[#9CA3AF] group-hover:text-[#7E22CE] transition-colors" />
+                    <ChevronRight className="w-4 h-4 text-[#6B7280] group-hover:text-[#7E22CE] transition-colors" />
                   </Link>
 
                   {/* Action 4: Generate Report */}
@@ -633,7 +636,7 @@ function CompanyDashboard() {
                         <p className="text-[11px] text-[#5F6B61]">Export your sustainability data</p>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-[#9CA3AF] group-hover:text-[#D97706] transition-colors" />
+                    <ChevronRight className="w-4 h-4 text-[#6B7280] group-hover:text-[#D97706] transition-colors" />
                   </Link>
                 </div>
               </div>

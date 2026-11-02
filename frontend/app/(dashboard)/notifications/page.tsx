@@ -21,7 +21,7 @@ export default function Notifications() {
     try { await apiClient('/api/notifications/read', { method: 'POST', body: JSON.stringify({ key }) }); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : "Unable to mark as read"); }
   }
-  return <><Header title="Notifications" subtitle="Current alerts and review reminders" /><main className="p-5 lg:p-8 max-w-5xl space-y-4">
+  return <><Header title="Notifications" subtitle="Current alerts and review reminders" /><main id="page-content" tabIndex={-1} className="p-5 lg:p-8 max-w-5xl space-y-4">
     <p className="text-sm text-slate-600">Active alerts are updated from current records. Resolved conditions leave this list. Read status is saved for your account.</p>
     <button disabled={busy} onClick={() => void load()} className="border rounded-lg p-2">{busy ? "Loading…" : "Refresh"}</button>
     {error && <p role="alert" className="text-red-700">{error}</p>}

@@ -50,7 +50,7 @@ export async function apiClient<T>(
   }
 
   const headers = new Headers(options.headers || {});
-  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+  if (options.body != null && !headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   headers.set("Accept", "application/json");
@@ -60,10 +60,15 @@ export async function apiClient<T>(
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
+  // Bound stalled requests, but never automatically retry writes or purchases.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
   try {
     const response = await fetch(url, {
       ...options,
       headers,
+      signal,
     });
 
     let jsonResponse: ApiResponse<T> | T | null = null;
@@ -114,7 +119,18 @@ export async function apiClient<T>(
     if (err instanceof ApiError) {
       throw err;
     }
-    const message = "Unable to connect to the EcoTrack backend.";
+    if (options.signal?.aborted) throw err;
+    if (controller.signal.aborted) {
+      const isRead = !options.method || ["GET", "HEAD"].includes(options.method.toUpperCase());
+      throw new ApiError(isRead
+        ? "The request timed out. Check your connection and try again."
+        : "The request timed out. Check your records before submitting again; the operation may have completed.", 408);
+    }
+    const message = typeof navigator !== "undefined" && !navigator.onLine
+      ? "You are offline. Reconnect and try again."
+      : "Unable to connect to the EcoTrack backend.";
     throw new ApiError(message, 0);
+  } finally {
+    clearTimeout(timer);
   }
 }

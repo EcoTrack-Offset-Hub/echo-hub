@@ -24,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="font-sans antialiased bg-background text-foreground min-h-screen">
+        <a href="#page-content" className="skip-link">Skip to page content</a>
         {children}
       </body>
     </html>

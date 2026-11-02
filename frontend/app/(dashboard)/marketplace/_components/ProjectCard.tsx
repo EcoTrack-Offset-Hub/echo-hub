@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils/cn";
 
 interface ProjectCardProps {
   project: MarketplaceProject;
+  priority?: boolean;
   onSelectProject?: (project: MarketplaceProject) => void;
   onPurchase?: (project: MarketplaceProject) => void;
   onToggleSave?: (projectId: string) => void;
@@ -16,6 +17,7 @@ interface ProjectCardProps {
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({
   project,
+  priority = false,
   onSelectProject,
   onPurchase,
   onToggleSave,
@@ -42,6 +44,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       <div className="relative h-44 w-full bg-[#F3F4F6] overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          width={800}
+          height={450}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
+          decoding="async"
           src={project.imageUrl || "/project-placeholder.svg"}
           alt={project.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

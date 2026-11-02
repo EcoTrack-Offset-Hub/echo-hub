@@ -3,6 +3,7 @@ const { decimal } = require('./services/precision');
 // Main Express API entry point for EcoTrack Hub.
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 
 // Load server-only environment variables from backend/.env.
 require("dotenv").config({ path: require("path").join(__dirname, ".env") });
@@ -79,9 +80,12 @@ app.use(
       return callback(new Error("Origin is not allowed by CORS."));
     },
     credentials: true,
+    maxAge: 600,
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+// Compress larger JSON responses for both company and administration pages.
+app.use(compression());
 app.use(express.json());
 
 // Return only the safe user fields; never return a password hash.

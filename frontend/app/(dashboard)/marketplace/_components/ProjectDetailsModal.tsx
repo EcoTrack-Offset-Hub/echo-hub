@@ -60,7 +60,11 @@ export const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
         <div className="relative h-52 w-full rounded-2xl overflow-hidden bg-[#F3F4F6] border border-[#E2E8E3]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={project.imageUrl || "/project-placeholder.svg"}
+            width={800}
+          height={450}
+          loading="lazy"
+          decoding="async"
+          src={project.imageUrl || "/project-placeholder.svg"}
             alt={project.name}
             className="w-full h-full object-cover"
             onError={(event) => {

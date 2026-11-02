@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 
 import { EmissionReview } from "@/components/admin/EmissionReview";
 import { Modal } from "@/components/ui/Modal";
@@ -7,10 +8,12 @@ import { recordTonnes } from "@/lib/validation/emissionTotals";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
-import { ScopeDonutChart } from "@/components/charts/ScopeDonutChart";
-import { AddEmissionModal } from "./_components/AddEmissionModal";
-import { CalculationDetailsModal } from "./_components/CalculationDetailsModal";
-import { SaveSuccessModal } from "./_components/SaveSuccessModal";
+const ScopeDonutChart = dynamic(() => import("@/components/charts/ScopeDonutChart").then(module => module.ScopeDonutChart), {
+  loading: () => <div role="status" className="min-h-[280px] rounded-xl bg-white p-5 text-sm text-[#5F6B61]">Loading emissions breakdown...</div>,
+});
+const AddEmissionModal = dynamic(() => import("./_components/AddEmissionModal").then(module => module.AddEmissionModal));
+const CalculationDetailsModal = dynamic(() => import("./_components/CalculationDetailsModal").then(module => module.CalculationDetailsModal));
+const SaveSuccessModal = dynamic(() => import("./_components/SaveSuccessModal").then(module => module.SaveSuccessModal));
 import { EmissionTable } from "./_components/EmissionTable";
 import { emissionsApi } from "@/lib/api/emissions";
 import { CalculationResult, EmissionCalculationInput, EmissionRecord } from "@/types";
@@ -307,7 +310,7 @@ export default function EmissionsPage() {
         subtitle="Carbon emissions management"
       />
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+      <main id="page-content" tabIndex={-1} className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
         {Object.keys(linkedFilters).length>0 && <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">Dashboard filters: {linkedFilters.companyId || (linkedFilters.all ? "All companies" : "Selected company")} {linkedFilters.month || "All reporting months"} {linkedFilters.quality || ""} {linkedFilters.record || ""}<button className="underline ml-3" onClick={()=>setLinkedFilters({})}>Clear dashboard filters</button></div>}
 
         {/* Error Alert Banner */}
@@ -375,7 +378,7 @@ export default function EmissionsPage() {
 
         {/* Filter Controls Bar */}
         <div className="bg-white p-3.5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
+          <div className={`grid w-full grid-cols-1 sm:grid-cols-2 ${user.role === "ADMIN" ? "xl:grid-cols-5" : "xl:grid-cols-4"} gap-3 text-xs`}>
             {user.role === "ADMIN" && <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E2E8E3] bg-[#F9FAFB]">
               <select
                 aria-label="Company filter"
@@ -385,7 +388,7 @@ export default function EmissionsPage() {
                   setLoading(true);
                   setLinkedFilters(previous => ({ ...(previous.month ? { month: previous.month } : {}), ...(previous.quality ? { quality: previous.quality } : {}), ...(companyId ? { companyId } : { all: "1" }) }));
                 }}
-                className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer max-w-56"
+                className="w-full min-w-0 bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer max-w-56"
               >
                 <option value="">All Companies</option>
                 {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
@@ -398,7 +401,7 @@ export default function EmissionsPage() {
                 aria-label="Date Range filter"
                 value={dateRange}
                 onChange={(e) => setDateRange(e.target.value)}
-                className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
+                className="w-full min-w-0 bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
               >
                 <option>Last 12 months</option>
                 <option>Year to Date (2026)</option>
@@ -414,7 +417,7 @@ export default function EmissionsPage() {
                 aria-label="Scope filter"
                 value={selectedScope}
                 onChange={(e) => setSelectedScope(e.target.value)}
-                className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
+                className="w-full min-w-0 bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
               >
                 <option>All Scopes</option>
                 <option>Scope 1</option>
@@ -429,7 +432,7 @@ export default function EmissionsPage() {
                 aria-label="Category filter"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
+                className="w-full min-w-0 bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
               >
                 <option>All Categories</option>
                 <option>Purchased Electricity</option>
@@ -448,7 +451,7 @@ export default function EmissionsPage() {
                 aria-label="Location filter"
                 value={selectedLocation}
                 onChange={(e) => setSelectedLocation(e.target.value)}
-                className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
+                className="w-full min-w-0 bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
               >
                 <option>All Locations</option>
                 <option>Headquarters Building A</option>
@@ -496,7 +499,7 @@ export default function EmissionsPage() {
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#5F6B61]">Scope 1</span>
-              <div className="w-8 h-8 rounded-lg bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#DCFCE7] text-[#15803D] flex items-center justify-center">
                 <Flame className="w-4 h-4" />
               </div>
             </div>
@@ -513,7 +516,7 @@ export default function EmissionsPage() {
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#5F6B61]">Scope 2</span>
-              <div className="w-8 h-8 rounded-lg bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#E0F2FE] text-[#0369A1] flex items-center justify-center">
                 <Plug className="w-4 h-4" />
               </div>
             </div>
@@ -555,13 +558,13 @@ export default function EmissionsPage() {
               </div>
 
               <div className="flex items-center gap-3 text-[11px] font-medium">
-                <span className="flex items-center gap-1 text-[#16A34A]">
+                <span className="flex items-center gap-1 text-[#15803D]">
                   <span className="w-2 h-2 rounded-full bg-[#16A34A]" /> Scope 1
                 </span>
-                <span className="flex items-center gap-1 text-[#0284C7]">
+                <span className="flex items-center gap-1 text-[#0369A1]">
                   <span className="w-2 h-2 rounded-full bg-[#0284C7]" /> Scope 2
                 </span>
-                <span className="flex items-center gap-1 text-[#10B981]">
+                <span className="flex items-center gap-1 text-[#047857]">
                   <span className="w-2 h-2 rounded-full bg-[#10B981]" /> Scope 3
                 </span>
               </div>
@@ -653,7 +656,7 @@ export default function EmissionsPage() {
                   topSources.map((s) => (
                     <div key={s.rank} className="py-2.5 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-[#9CA3AF] text-[11px]">{s.rank}</span>
+                        <span className="font-mono font-bold text-[#6B7280] text-[11px]">{s.rank}</span>
                         <div>
                           <p className="font-semibold text-[#111827]">{s.name}</p>
                           <p className="text-[10px] text-[#6B7280]">{s.scope}</p>
@@ -760,7 +763,7 @@ export default function EmissionsPage() {
       </Modal>}
 
       {/* Add / Edit Emission Modal */}
-      <AddEmissionModal
+      {isAddModalOpen && (<AddEmissionModal
         key={isAddModalOpen ? (editingRecord ? `edit-${editingRecord.id}` : "add-new") : "closed"}
         isOpen={isAddModalOpen}
         mode={modalMode}
@@ -790,10 +793,10 @@ export default function EmissionsPage() {
         isCalculating={isCalculating}
         serverError={calculationError}
         onProceedToReview={handleProceedToReview}
-      />
+      />)}
 
       {/* Review Calculation Modal (Step 2 of Add/Edit) */}
-      <CalculationDetailsModal
+      {isReviewModalOpen && (<CalculationDetailsModal
         isOpen={isReviewModalOpen}
         onClose={() => setIsReviewModalOpen(false)}
         onBack={() => {
@@ -802,10 +805,10 @@ export default function EmissionsPage() {
         }}
         onSave={handleSaveCalculation}
         calculation={activeCalculation}
-      />
+      />)}
 
       {/* View Calculation Details Modal (Read-only, from Table Actions) */}
-      <CalculationDetailsModal
+      {isViewModalOpen && (<CalculationDetailsModal
         isOpen={isViewModalOpen}
         onClose={() => {
           setIsViewModalOpen(false);
@@ -813,14 +816,14 @@ export default function EmissionsPage() {
         }}
         calculation={viewCalculation}
         readOnly={true}
-      />
+      />)}
 
       {/* Save Success Modal */}
-      <SaveSuccessModal
+      {isSuccessModalOpen && (<SaveSuccessModal
         isOpen={isSuccessModalOpen}
         onClose={() => setIsSuccessModalOpen(false)}
         calculation={activeCalculation}
-      />
+      />)}
     </div>
   );
 }
