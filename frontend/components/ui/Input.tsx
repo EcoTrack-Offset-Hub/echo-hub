@@ -39,7 +39,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         )}
         <div className="relative flex items-center">
           {leftIcon && (
-            <div className="absolute left-3.5 flex items-center pointer-events-none text-[#9CA3AF]">
+            <div className="absolute left-3.5 flex items-center pointer-events-none text-[#6B7280]">
               {leftIcon}
             </div>
           )}
@@ -49,7 +49,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             aria-invalid={!!errorMessage}
             aria-describedby={errorMessage ? errorId : helperText ? helperId : undefined}
             className={cn(
-              "w-full rounded-lg border border-[#E2E8E3] bg-white px-3.5 py-2 text-sm text-[#111827] placeholder:text-[#9CA3AF] shadow-xs transition-colors outline-hidden focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32]",
+              "w-full rounded-lg border border-[#E2E8E3] bg-white px-3.5 py-2 text-sm text-[#111827] placeholder:text-[#6B7280] shadow-xs transition-colors outline-hidden focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32]",
               leftIcon ? "pl-10" : "",
               rightIcon ? "pr-10" : "",
               errorMessage
@@ -60,7 +60,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             {...props}
           />
           {rightIcon && (
-            <div className="absolute right-3.5 flex items-center text-[#9CA3AF]">
+            <div className="absolute right-3.5 flex items-center text-[#6B7280]">
               {rightIcon}
             </div>
           )}

@@ -1,11 +1,12 @@
 "use client";
+import dynamic from "next/dynamic";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { TransactionTable } from "./_components/TransactionTable";
-import { CertificateModal } from "./_components/CertificateModal";
+const CertificateModal = dynamic(() => import("./_components/CertificateModal").then(module => module.CertificateModal));
 import { transactionsApi } from "@/lib/api/transactions";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
 import { clientCache } from "@/lib/cache/clientCache";
@@ -172,7 +173,7 @@ export default function TransactionsPage() {
         subtitle="Carbon credit transactions & records"
       />
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+      <main id="page-content" tabIndex={-1} className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
 
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -231,7 +232,7 @@ export default function TransactionsPage() {
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#5F6B61]">Credits Purchased</span>
-              <div className="w-8 h-8 rounded-lg bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#DCFCE7] text-[#15803D] flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4" />
               </div>
             </div>
@@ -248,7 +249,7 @@ export default function TransactionsPage() {
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#5F6B61]">Active Ledger Count</span>
-              <div className="w-8 h-8 rounded-lg bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#E0F2FE] text-[#0369A1] flex items-center justify-center">
                 <CreditCard className="w-4 h-4" />
               </div>
             </div>
@@ -282,13 +283,13 @@ export default function TransactionsPage() {
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto flex-1">
             {/* Search Input */}
             <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#6B7280] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search transaction ID, project..."
-                className="w-full pl-9 pr-3.5 py-1.5 text-xs rounded-xl border border-[#E2E8E3] focus:border-[#2E7D32] outline-hidden placeholder:text-[#9CA3AF]"
+                className="w-full pl-9 pr-3.5 py-1.5 text-xs rounded-xl border border-[#E2E8E3] focus:border-[#2E7D32] outline-hidden placeholder:text-[#6B7280]"
               />
             </div>
 
@@ -329,12 +330,12 @@ export default function TransactionsPage() {
       </main>
 
       {/* Certificate of Retirement Dialog */}
-      <CertificateModal
+      {isCertModalOpen && (<CertificateModal
         isOpen={isCertModalOpen}
         onClose={() => setIsCertModalOpen(false)}
         transaction={selectedCertificateTxn}
         companyName={activeCompanyName}
-      />
+      />)}
     </div>
   );
 }

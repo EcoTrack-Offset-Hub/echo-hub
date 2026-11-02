@@ -63,7 +63,7 @@ export default function ReportsPage() {
   return (
     <div className="flex-1 flex flex-col min-h-screen">
       <Header title="Reports" subtitle="Sustainability reporting and compliance" />
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+      <main id="page-content" tabIndex={-1} className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight">Emissions Reports</h2>

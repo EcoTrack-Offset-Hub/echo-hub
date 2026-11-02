@@ -110,7 +110,7 @@ export const CalculationDetailsModal: React.FC<CalculationDetailsModalProps> = (
           <p className="pl-5">Source: {calculation.source || "Historical source not recorded"}</p>
           <p className="pl-5">Assumptions: {calculation.assumptions || "Historical assumptions not recorded"}</p>
           {calculation.factorVersionId && <p className="pl-5">Factor version: {calculation.factorVersionId}</p>}
-          <div className="pl-5 pt-1 text-[11px] text-[#879188] flex items-center justify-between">
+          <div className="pl-5 pt-1 text-[11px] text-[#5F6B61] flex items-center justify-between">
             <span>Period: {calculation.reportingPeriod}</span>
             <span>Facility: {calculation.facility}</span>
           </div>

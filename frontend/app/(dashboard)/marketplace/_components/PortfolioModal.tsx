@@ -95,7 +95,7 @@ const PortfolioContent: React.FC<PortfolioContentProps> = ({ companyId, onClose 
 
             <div className="p-3.5 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0]">
               <span className="text-[11px] font-semibold text-[#166534] flex items-center gap-1">
-                <Coins className="w-3.5 h-3.5 text-[#16A34A]" />
+                <Coins className="w-3.5 h-3.5 text-[#15803D]" />
                 Total Invested
               </span>
               <p className="text-lg font-black text-[#111827] mt-1">

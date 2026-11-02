@@ -18,7 +18,7 @@ function WorkspaceBoundary({ children }: { children: React.ReactNode }) {
     return (
       <>
         <Header title="Administration" subtitle="Admin workspace required" />
-        <main className="p-6 space-y-4">
+        <main id="page-content" tabIndex={-1} className="p-6 space-y-4">
           <p className="text-sm text-[#5F6B61]">
             This page is available only in the admin workspace. Use the workspace selector to return to Admin Dashboard.
           </p>

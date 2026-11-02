@@ -86,7 +86,14 @@ export function AuthSessionProvider({
     };
   }, [user, selectedCompanyId, companies, refreshCompanies]);
 
-  return value ? <AuthContext.Provider value={value}>{children}</AuthContext.Provider> : null;
+  return value ? <AuthContext.Provider value={value}>{children}</AuthContext.Provider> : (
+    <main id="page-content" tabIndex={-1} className="min-h-screen flex items-center justify-center p-6 bg-[#F8FAF8]">
+      <div className="max-w-sm w-full rounded-2xl border border-[#E2E8E3] bg-white p-6 shadow-sm">
+        <p role="status" className="font-semibold text-[#111827]">Loading your workspace...</p>
+        <p className="mt-2 text-sm text-[#5F6B61]">Checking your session. Please wait.</p>
+      </div>
+    </main>
+  );
 }
 
 // Convenience hook so pages can read the current user and company context.

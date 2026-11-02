@@ -4,9 +4,10 @@ import { CheckCircle2, X } from "lucide-react";
 import { notFound, useParams } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
-import { TransactionManagement } from "@/components/admin/TransactionManagement";
-import { FactorManagement } from "@/components/admin/FactorManagement";
-import { ProjectManagement } from "@/components/admin/ProjectManagement";
+import dynamic from "next/dynamic";
+const TransactionManagement = dynamic(() => import("@/components/admin/TransactionManagement").then(module => module.TransactionManagement));
+const FactorManagement = dynamic(() => import("@/components/admin/FactorManagement").then(module => module.FactorManagement));
+const ProjectManagement = dynamic(() => import("@/components/admin/ProjectManagement").then(module => module.ProjectManagement));
 import { Pagination } from "@/components/ui/Pagination";
 import { Modal } from "@/components/ui/Modal";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
@@ -77,7 +78,7 @@ export default function AdminManagement() {
     };
   }, [section, page, auditPageSize, refresh, user.role]);
   if (user.role !== "ADMIN")
-    return <main className="p-8">Administrator access required.</main>;
+    return <main id="page-content" tabIndex={-1} className="p-8">Administrator access required.</main>;
   if (!["factors", "projects", "transactions", "audit"].includes(section)) notFound();
   const reload = () => {
     setLoading(true);
@@ -140,7 +141,7 @@ export default function AdminManagement() {
   return (
     <div>
       <Header title={title} subtitle="EcoTrack platform administration" />
-      <main className="p-5 lg:p-8 space-y-5">
+      <main id="page-content" tabIndex={-1} className="p-5 lg:p-8 space-y-5">
         {error && (
           <div role="alert" className="bg-red-50 text-red-800 p-4 rounded-lg">
             {error}{" "}
@@ -156,7 +157,7 @@ export default function AdminManagement() {
             <button type="button" aria-label="Dismiss success notification" onClick={() => setNotice("")} className="rounded p-1 hover:bg-green-50"><X size={16} /></button>
           </div>
         )}
-        {loading && <p role="status">Loading records...</p>}
+        {loading && <p role="status" className="sr-only">Loading records...</p>}
         {section === "factors" && (
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div><h2 className="text-lg font-semibold">Emission Factors</h2><p className="text-xs text-slate-500 mt-1">Compare conversion values and inspect their calculation evidence.</p></div>
@@ -278,7 +279,7 @@ export default function AdminManagement() {
         {section === "projects" && <ProjectManagement rows={rows} loading={loading} saving={saving} errorMessage={error} onSave={save} />}
         {section === "factors" && <FactorManagement rows={rows} loading={loading} onAdd={() => setFactorFormOpen(true)} />}
         {section === "transactions" && <TransactionManagement key={page} rows={rows} loading={loading} saving={saving} errorMessage={error} onSave={save} />}
-        {section === "audit" && <div className="bg-white border rounded-xl overflow-x-auto">
+        {section === "audit" && <div className="bg-white border rounded-xl overflow-x-auto min-h-[640px]">
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50">
               <tr>

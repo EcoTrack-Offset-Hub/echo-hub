@@ -17,11 +17,15 @@
     "test:threshold": "node tests/emissions-threshold.test.js",
     "test:operations": "node tests/admin-operations.test.js",
     "test:browser": "node --use-system-ca tests/browser-chart.test.js",
-    "test:browser:install": "node --use-system-ca node_modules/playwright/cli.js install chromium"
+    "test:browser:install": "node --use-system-ca node_modules/playwright/cli.js install chromium",
+    "audit:pages": "node --use-system-ca tests/audit-pages.mjs",
+    "test:network": "node tests/api-client-network.test.js",
+    "test:concurrency:local": "node tests/run-local-concurrency.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "bcryptjs": "^3.0.3",
+    "compression": "^1.8.2",
     "cors": "^2.8.5",
     "decimal.js": "^10.6.0",
     "dotenv": "^16.4.7",
@@ -31,7 +35,9 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "playwright": "^1.64.1"
+    "lighthouse": "^13.6.0",
+    "playwright": "^1.64.1",
+    "puppeteer-core": "^25.16.0"
   },
   "engines": {
     "node": ">=24.0.0"

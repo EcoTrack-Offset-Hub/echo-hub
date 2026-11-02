@@ -1,12 +1,13 @@
 "use client";
+import dynamic from "next/dynamic";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { ProjectCard } from "./_components/ProjectCard";
-import { PurchaseModal } from "./_components/PurchaseModal";
-import { PurchaseSuccessModal } from "./_components/PurchaseSuccessModal";
+const PurchaseModal = dynamic(() => import("./_components/PurchaseModal").then(module => module.PurchaseModal));
+const PurchaseSuccessModal = dynamic(() => import("./_components/PurchaseSuccessModal").then(module => module.PurchaseSuccessModal));
 import { marketplaceApi } from "@/lib/api/marketplace";
 import { MarketplaceProject, PurchaseOrder } from "@/types";
 import {
@@ -114,7 +115,7 @@ export default function MarketplacePage() {
         subtitle="Verified carbon projects"
       />
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+      <main id="page-content" tabIndex={-1} className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
 
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -172,13 +173,13 @@ export default function MarketplacePage() {
                 </span>
                 <span className="text-xs font-semibold text-[#5F6B61]">tCO₂e</span>
               </div>
-              <p className="text-[10px] text-[#879188] mt-0.5">Across verified project pools</p>
+              <p className="text-[10px] text-[#5F6B61] mt-0.5">Across verified project pools</p>
             </div>
           </div>
 
           {/* Active Projects Count */}
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center flex-shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-[#DCFCE7] text-[#15803D] flex items-center justify-center flex-shrink-0">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
@@ -195,7 +196,7 @@ export default function MarketplacePage() {
 
           {/* Average Price */}
           <div className="bg-white p-5 rounded-2xl border border-[#E2E8E3] shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center flex-shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-[#E0F2FE] text-[#0369A1] flex items-center justify-center flex-shrink-0">
               <Coins className="w-6 h-6" />
             </div>
             <div>
@@ -204,7 +205,7 @@ export default function MarketplacePage() {
                 <span className="text-2xl font-extrabold text-[#111827]">${averagePrice}</span>
                 <span className="text-xs font-semibold text-[#5F6B61]">/ tCO₂e</span>
               </div>
-              <p className="text-[10px] text-[#879188] mt-0.5">Transparent market rate</p>
+              <p className="text-[10px] text-[#5F6B61] mt-0.5">Transparent market rate</p>
             </div>
           </div>
         </div>
@@ -214,13 +215,13 @@ export default function MarketplacePage() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             {/* Search */}
             <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#6B7280] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search projects by name, location..."
-                className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-[#E2E8E3] focus:border-[#2E7D32] outline-hidden placeholder:text-[#9CA3AF]"
+                className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-[#E2E8E3] focus:border-[#2E7D32] outline-hidden placeholder:text-[#6B7280]"
               />
             </div>
 
@@ -292,7 +293,7 @@ export default function MarketplacePage() {
           </div>
         ) : projects.length === 0 ? (
           <div className="py-16 px-6 bg-white rounded-2xl border border-[#E2E8E3] text-center space-y-2">
-            <div className="w-12 h-12 mx-auto rounded-full bg-[#F3F4F6] text-[#9CA3AF] flex items-center justify-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center">
               <Inbox className="w-6 h-6" />
             </div>
             <p className="text-sm font-bold text-[#111827]">No projects match your filter criteria.</p>
@@ -306,8 +307,9 @@ export default function MarketplacePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {projects.map((proj) => (
+            {projects.map((proj, index) => (
               <ProjectCard
+                priority={index === 0}
                 key={proj.id}
                 project={proj}
                 onPurchase={handleOpenPurchase}
@@ -318,19 +320,19 @@ export default function MarketplacePage() {
       </main>
 
       {/* Purchase Modal (Inventory Checked on Backend) */}
-      <PurchaseModal
+      {isPurchaseModalOpen && (<PurchaseModal
         isOpen={isPurchaseModalOpen}
         onClose={() => setIsPurchaseModalOpen(false)}
         project={selectedProject}
         onPurchaseSuccess={handlePurchaseSuccess}
-      />
+      />)}
 
       {/* Success Modal */}
-      <PurchaseSuccessModal
+      {isSuccessModalOpen && (<PurchaseSuccessModal
         isOpen={isSuccessModalOpen}
         onClose={() => setIsSuccessModalOpen(false)}
         order={completedOrder}
-      />
+      />)}
     </div>
   );
 }

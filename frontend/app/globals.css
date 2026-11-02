@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+.skip-link { position: fixed; top: .75rem; left: .75rem; z-index: 100; transform: translateY(-180%); background: white; color: #14532d; padding: .75rem 1rem; border: 2px solid #2e7d32; border-radius: .5rem; }
+.skip-link:focus { transform: translateY(0); }
+@media (pointer: coarse) {
+  button, select, input:not([type="checkbox"]):not([type="radio"]), a[role="button"] { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
 @layer base {
   :root {
     --primary: #2E7D32;

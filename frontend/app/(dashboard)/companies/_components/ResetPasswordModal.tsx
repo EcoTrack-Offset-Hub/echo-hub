@@ -100,7 +100,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
           if (fieldErrors.newPassword) setFieldErrors((prev) => ({ ...prev, newPassword: "" }));
         }}
         placeholder="Enter new secure password (min. 6 chars)"
-        leftIcon={<Lock className="w-4 h-4 text-[#9CA3AF]" />}
+        leftIcon={<Lock className="w-4 h-4 text-[#6B7280]" />}
         errorMessage={fieldErrors.newPassword}
         disabled={submitting}
       />
@@ -114,7 +114,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
           if (fieldErrors.confirmPassword) setFieldErrors((prev) => ({ ...prev, confirmPassword: "" }));
         }}
         placeholder="Re-enter new password"
-        leftIcon={<KeyRound className="w-4 h-4 text-[#9CA3AF]" />}
+        leftIcon={<KeyRound className="w-4 h-4 text-[#6B7280]" />}
         errorMessage={fieldErrors.confirmPassword}
         disabled={submitting}
       />

@@ -217,7 +217,7 @@ export const AddEmissionModal: React.FC<AddEmissionModalProps> = ({
 
         {/* Validation indicator banner */}
         <div className="p-3 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] flex items-center gap-2.5 text-xs text-[#166534] font-medium">
-          <CheckCircle2 className="w-4 h-4 text-[#16A34A] flex-shrink-0" />
+          <CheckCircle2 className="w-4 h-4 text-[#15803D] flex-shrink-0" />
           <span>✓ Inputs valid according to GHG Protocol Scope standards</span>
         </div>
 

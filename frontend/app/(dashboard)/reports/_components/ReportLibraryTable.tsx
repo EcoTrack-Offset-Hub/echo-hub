@@ -76,7 +76,7 @@ export const ReportLibraryTable: React.FC<ReportLibraryTableProps> = ({
             </div>
           ) : reports.length === 0 ? (
             <div className="py-14 px-6 flex flex-col items-center justify-center space-y-2 text-center">
-              <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#9CA3AF] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center">
                 <Inbox className="w-5 h-5" />
               </div>
               <p className="text-xs font-semibold text-[#374151]">No reports match your filters.</p>

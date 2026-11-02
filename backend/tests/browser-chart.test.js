@@ -6,6 +6,7 @@ const path = require('node:path');
 const net = require('node:net');
 const { spawn, execFileSync } = require('node:child_process');
 const { PGlite } = require('@electric-sql/pglite');
+const { NETWORK_PROFILES } = require('./network-profiles');
 const { decimal } = require('../services/precision');
 
 const root = path.resolve(__dirname, '../..');
@@ -82,6 +83,7 @@ async function run() {
     await context.tracing.start({screenshots:true,snapshots:true});tracing=true;
     page=await context.newPage();page.setDefaultTimeout(30000);
     const pageErrors=[];page.on('pageerror',error=>pageErrors.push(error.message));
+    const consoleErrors=[];page.on('console',message=>{if(message.type()==='error')consoleErrors.push(message.text());});
     await page.goto(frontendBase+'/login');
     await page.getByPlaceholder('Enter your email').fill(email);
     await page.getByPlaceholder('Enter your password').fill(password);
@@ -123,8 +125,51 @@ async function run() {
     await checkRange('3M',true);
     await checkRange('12M',true);
     await checkRange('6M',true);
+    assert.deepEqual(consoleErrors,[], 'Browser console errors occurred');
+    await page.goto(frontendBase + '/emissions');
+    await page.getByRole('button', {name:'View', exact:true}).first().click();
+    const dialog = page.getByRole('dialog'); await dialog.waitFor({state:'visible'});
+    assert(await dialog.getAttribute('aria-labelledby'), 'Dialog must reference its title');
+    assert(await dialog.evaluate(node => node.contains(document.activeElement)), 'Focus must move into the dialog');
+    await page.keyboard.press('Shift+Tab');
+    assert(await dialog.evaluate(node => node.contains(document.activeElement)), 'Shift+Tab must stay inside the dialog');
+    await page.keyboard.press('Escape'); await dialog.waitFor({state:'hidden'});
+    result.assertions.push('Calculation dialog is named, traps keyboard focus, and closes with Escape.');
     assert.deepEqual(pageErrors,[],'Browser JavaScript errors occurred');
-    result.status='PASS';result.detail='Real Chromium sign-in, 3M/6M/12M chart changes, saved-value tooltips, tooltip dismissal, and keyboard focus passed. Screenshots and a Playwright trace were saved.';
+    // Exercise live request throttling separately from Lighthouse scoring.
+    const networkSession = await context.newCDPSession(page);
+    await networkSession.send('Network.enable');
+    for (const [name, profile] of Object.entries(NETWORK_PROFILES)) {
+      await networkSession.send('Network.emulateNetworkConditions', {
+        offline: false, latency: profile.requestLatencyMs,
+        downloadThroughput: profile.downloadThroughputKbps * 1000 / 8,
+        uploadThroughput: profile.uploadThroughputKbps * 1000 / 8,
+      });
+      await page.reload({waitUntil:'domcontentloaded', timeout:120000});
+      const view = page.getByRole('button', {name:'View', exact:true}).first();
+      await view.waitFor({state:'visible', timeout:120000});
+      await view.click(); await dialog.waitFor({state:'visible'});
+      await page.keyboard.press('Escape'); await dialog.waitFor({state:'hidden'});
+      result.assertions.push(`${name}: saved emissions loaded and calculation dialog remained usable under actual network throttling.`);
+    }
+    await networkSession.send('Network.emulateNetworkConditions', {offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1});
+    await networkSession.detach();
+    assert.deepEqual(consoleErrors, [], 'Unexpected console errors under network profiles');
+    // A network loss must release the loading button and explain recovery.
+    await page.goto(frontendBase + '/login');
+    await page.getByPlaceholder('Enter your email').fill(email);
+    await page.getByPlaceholder('Enter your password').fill(password);
+    const previousToken = await page.evaluate(() => sessionStorage.getItem('ecotrack_auth_token'));
+    await context.setOffline(true);
+    const signIn = page.getByRole('button', {name:'Sign In', exact:true});
+    await signIn.click();
+    await page.getByText('You are offline. Reconnect and try again.', {exact:true}).waitFor({state:'visible'});
+    assert(await signIn.isEnabled(), 'Offline login must release its pending button');
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('ecotrack_auth_token')), previousToken, 'Failed login must not replace the session');
+    await context.setOffline(false);
+    result.assertions.push('Offline login shows a reconnect message and releases its pending button without replacing the existing session.');
+    assert.deepEqual(pageErrors, [], 'Network changes must not crash the browser page');
+    result.status='PASS';result.detail='Real Chromium sign-in, 3M/6M/12M chart changes, saved-value tooltips, tooltip dismissal, keyboard focus, and four network-profile interactions passed. Screenshots and a Playwright trace were saved.';
     console.log('[PASS] TC-05.4 Browser chart hover, 3M/6M/12M controls and keyboard tooltip interactions.');
   } catch(error) {
     result.detail=error.message;process.exitCode=1;console.error('[FAIL] TC-05.4 '+error.message);

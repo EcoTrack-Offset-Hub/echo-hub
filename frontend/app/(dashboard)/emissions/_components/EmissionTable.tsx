@@ -71,6 +71,8 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
   const [recordToDelete, setRecordToDelete] = useState<EmissionRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [requestedPage, setRequestedPage] = useState(1);
+  const pageSize = 25;
 
 
 
@@ -91,6 +93,9 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
       return true;
     });
   }, [records, scopeFilter, categoryFilter, searchQuery]);
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const visibleRecords = filteredRecords.slice((page - 1) * pageSize, page * pageSize);
 
   const handleConfirmDelete = async () => {
     if (!recordToDelete || !onDeleteRecord) return;
@@ -126,20 +131,20 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 flex-1">
           {/* Search Box */}
           <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-[#6B7280] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setRequestedPage(1); }}
               placeholder="Search activity or facility..."
               aria-label="Search emissions activities"
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-[#E2E8E3] bg-white focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32] outline-hidden placeholder:text-[#9CA3AF] transition-colors"
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-[#E2E8E3] bg-white focus:border-[#2E7D32] focus:ring-1 focus:ring-[#2E7D32] outline-hidden placeholder:text-[#6B7280] transition-colors"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
                 aria-label="Clear search query"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#9CA3AF] hover:text-[#4B5563] p-1 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#6B7280] hover:text-[#4B5563] p-1 cursor-pointer"
               >
                 ✕
               </button>
@@ -152,7 +157,7 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
             <select
               aria-label="Filter by scope in table"
               value={scopeFilter}
-              onChange={(e) => setScopeFilter(e.target.value)}
+              onChange={(e) => { setScopeFilter(e.target.value); setRequestedPage(1); }}
               className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
             >
               <option>All Scopes</option>
@@ -167,7 +172,7 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
             <select
               aria-label="Filter by category in table"
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
+              onChange={(e) => { setCategoryFilter(e.target.value); setRequestedPage(1); }}
               className="bg-transparent font-medium text-[#111827] outline-hidden cursor-pointer"
             >
               <option>All Categories</option>
@@ -227,7 +232,7 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
           </div>
         ) : records.length === 0 ? (
           <div className="py-14 px-6 flex flex-col items-center justify-center space-y-2 text-center">
-            <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#9CA3AF] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center">
               <Inbox className="w-5 h-5" />
             </div>
             <p className="text-xs font-semibold text-[#374151]">No emissions records yet.</p>
@@ -261,7 +266,7 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F3F4F6]">
-              {filteredRecords.map((rec) => {
+              {visibleRecords.map((rec) => {
                 const dt = formatDateTime(rec.date);
                 return (
                   <tr
@@ -350,6 +355,11 @@ export const EmissionTable: React.FC<EmissionTableProps> = ({
           </table>
         )}
       </div>
+
+      {filteredRecords.length > pageSize && <nav aria-label="Emissions record pagination" className="flex flex-wrap justify-between items-center gap-3 border-t px-5 py-3 text-xs">
+        <span>Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredRecords.length)} of {filteredRecords.length} matching records</span>
+        <div className="flex items-center gap-3"><button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>Previous</button><span>Page {page} of {totalPages}</span><button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={page === totalPages} onClick={() => setRequestedPage(page + 1)}>Next</button></div>
+      </nav>}
 
       {/* Delete Confirmation Modal */}
       {recordToDelete && (

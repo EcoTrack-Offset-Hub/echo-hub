@@ -70,7 +70,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
           </div>
         ) : transactions.length === 0 ? (
           <div className="py-14 px-6 flex flex-col items-center justify-center space-y-2 text-center">
-            <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#9CA3AF] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center">
               <Inbox className="w-5 h-5" />
             </div>
             <p className="text-xs font-semibold text-[#374151]">No transactions recorded yet.</p>
@@ -141,7 +141,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                       </button>
                       <button
                         aria-label="More options"
-                        className="p-1 rounded-md text-[#9CA3AF] hover:text-[#111827] hover:bg-[#F3F4F6] cursor-pointer"
+                        className="p-1 rounded-md text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] cursor-pointer"
                       >
                         <MoreVertical className="w-3.5 h-3.5" />
                       </button>

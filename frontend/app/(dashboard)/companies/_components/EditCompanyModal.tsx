@@ -98,7 +98,7 @@ const EditCompanyForm: React.FC<EditCompanyFormProps> = ({
           if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: "" }));
         }}
         placeholder="e.g. Davao Green Logistics"
-        leftIcon={<Building2 className="w-4 h-4 text-[#9CA3AF]" />}
+        leftIcon={<Building2 className="w-4 h-4 text-[#6B7280]" />}
         errorMessage={fieldErrors.name}
         disabled={submitting}
       />
@@ -112,7 +112,7 @@ const EditCompanyForm: React.FC<EditCompanyFormProps> = ({
           if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: "" }));
         }}
         placeholder="sustainability@davaogreen.com"
-        leftIcon={<Mail className="w-4 h-4 text-[#9CA3AF]" />}
+        leftIcon={<Mail className="w-4 h-4 text-[#6B7280]" />}
         errorMessage={fieldErrors.email}
         disabled={submitting}
         helperText="This email will be required for the company user to log in."
@@ -144,7 +144,7 @@ const EditCompanyForm: React.FC<EditCompanyFormProps> = ({
         <div className="py-2.5 px-3 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] font-mono text-xs text-[#4B5563]">
           {company.id}
         </div>
-        <p className="text-[11px] text-[#879188]">
+        <p className="text-[11px] text-[#5F6B61]">
           Tenant ID cannot be changed. All emissions, transactions, and reports remain tied to this ID.
         </p>
       </div>

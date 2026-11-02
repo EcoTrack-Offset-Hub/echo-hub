@@ -6,7 +6,7 @@ export default function HelpPage() {
   return (
     <div className="min-h-screen bg-[#f7faf8]">
       <Header title="Help & Support" subtitle="Administrator guide" />
-      <main className="p-4 md:p-7 max-w-6xl mx-auto space-y-4">
+      <main id="page-content" tabIndex={-1} className="p-4 md:p-7 max-w-6xl mx-auto space-y-4">
         <Link href="/dashboard" className="inline-block text-sm text-green-800 underline">Back to dashboard</Link>
         <section className="bg-white border border-slate-200 rounded-xl p-6" aria-labelledby="admin-workspace-guide">
           <h2 id="admin-workspace-guide" className="font-bold">Your role as administrator</h2>

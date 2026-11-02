@@ -35,12 +35,12 @@ export function ProjectManagement({ rows, loading, saving, errorMessage, onSave 
       <span className="text-xs text-slate-500 pb-3">{visible.length} of {rows.length} projects</span>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-      {visible.map(project => {
+      {visible.map((project, index) => {
         const lowStock = project.low_inventory_threshold != null && Number(project.available_tco2e) < Number(project.low_inventory_threshold);
         return <article key={text(project, "id")} className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="relative h-44 bg-slate-100 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={text(project, "image_url") || "/project-placeholder.svg"} alt={text(project, "name")} className="h-full w-full object-cover" onError={event => { if (!event.currentTarget.src.endsWith('/project-placeholder.svg')) event.currentTarget.src = '/project-placeholder.svg'; }} />
+            <img width={800} height={450} loading={index < 2 ? "eager" : "lazy"} fetchPriority={index === 0 ? "high" : "auto"} decoding="async" src={text(project, "image_url") || "/project-placeholder.svg"} alt={text(project, "name")} className="h-full w-full object-cover" onError={event => { if (!event.currentTarget.src.endsWith('/project-placeholder.svg')) event.currentTarget.src = '/project-placeholder.svg'; }} />
             <div className="absolute top-3 inset-x-3 flex flex-wrap justify-between gap-2">
               <span className={`rounded-full border border-white/70 px-2.5 py-1 text-xs font-semibold shadow-sm ${project.lifecycle_status === "Active" ? "bg-green-50 text-green-800" : project.lifecycle_status === "Unreviewed" ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{project.lifecycle_status}</span>
               {demo(project) && <span className="rounded-full bg-amber-50 text-amber-800 px-2.5 py-1 text-xs font-semibold shadow-sm">Demo only</span>}
@@ -71,7 +71,7 @@ export function ProjectManagement({ rows, loading, saving, errorMessage, onSave 
       {error && <p role="alert" className="text-sm text-red-700 mb-4">{errorMessage || error}</p>}
       {dialog.mode === "View" ? <div className="space-y-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={text(row, "image_url") || "/project-placeholder.svg"} alt={text(row, "name")} className="w-full h-48 rounded-xl object-cover" onError={e => { e.currentTarget.onerror = null; if (!e.currentTarget.src.endsWith('/project-placeholder.svg')) e.currentTarget.src = '/project-placeholder.svg'; }} />
+        <img width={800} height={450} decoding="async" src={text(row, "image_url") || "/project-placeholder.svg"} alt={text(row, "name")} className="w-full h-48 rounded-xl object-cover" onError={e => { e.currentTarget.onerror = null; if (!e.currentTarget.src.endsWith('/project-placeholder.svg')) e.currentTarget.src = '/project-placeholder.svg'; }} />
         {demo(row) && <p className="rounded-lg bg-amber-50 text-amber-800 p-3 text-sm">Demonstration project. Its fictional records do not establish certification.</p>}
         <dl className="grid sm:grid-cols-2 gap-4 text-sm">{[["Type", "type"], ["Location", "location"], ["Country", "country"], ["Standard", "standard"], ["Price per tonne", "price_per_tonne"], ["Status", "lifecycle_status"], ["Registry reference", "registry_ref"], ["Low-stock threshold (tCO₂e)", "low_inventory_threshold"]].map(([label, key]) => <div key={key}><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 break-words">{text(row, key) || "Not configured"}</dd></div>)}</dl>
         <p className="text-sm whitespace-pre-wrap">{row.description}</p><p className="text-sm whitespace-pre-wrap"><strong>Certification evidence:</strong> {row.certification_evidence || "Not recorded"}</p>

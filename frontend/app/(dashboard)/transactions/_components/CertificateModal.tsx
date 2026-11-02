@@ -99,7 +99,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
             <span className="flex items-center gap-1 font-mono text-[10px]">
               <ShieldCheck className="w-3.5 h-3.5 text-[#2E7D32]" /> Recorded in EcoTrack
             </span>
-            <span className="text-[10px] text-[#9CA3AF]">
+            <span className="text-[10px] text-[#6B7280]">
               Status: <strong className="text-[#166534]">{transaction.status}</strong>
             </span>
           </div>

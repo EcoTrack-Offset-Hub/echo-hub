@@ -63,9 +63,9 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
 
   // Build points & area path
   const points = validPoints.map((d, i) => `${getX(i)},${getY(d.emissions)}`).join(" ");
-  const areaPath =
+  const areaPoints =
     validPoints.length > 1
-      ? `${points} L ${getX(validPoints.length - 1)},${height - padding.bottom} L ${getX(0)},${height - padding.bottom} Z`
+      ? `${points} ${getX(validPoints.length - 1)},${height - padding.bottom} ${getX(0)},${height - padding.bottom}`
       : "";
 
   // 4 Y-ticks from 0 to maxCeiling
@@ -105,7 +105,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
                 "px-2.5 py-1 rounded-md transition-all cursor-pointer",
                 range === p
                   ? "bg-[#2E7D32] text-white shadow-xs font-bold"
-                  : "text-[#6B7280] hover:text-[#111827]"
+                  : "text-[#4B5563] hover:text-[#111827]"
               )}
             >
               {p}
@@ -118,7 +118,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
       {showEmpty ? (
         <div className="h-56 flex flex-col items-center justify-center text-center p-6 space-y-2">
           <div className="w-10 h-10 rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center">
-            <BarChart3 className="w-5 h-5 text-[#9CA3AF]" />
+            <BarChart3 className="w-5 h-5 text-[#6B7280]" />
           </div>
           <p className="text-sm font-semibold text-[#111827]">Not enough historical data</p>
           <p className="text-xs text-[#6B7280] max-w-xs">{emptyMessage}</p>
@@ -151,7 +151,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
                     y={y + 3.5}
                     textAnchor="end"
                     fontSize="10"
-                    fill="#9CA3AF"
+                    fill="#4B5563"
                     fontWeight="500"
                   >
                     {tick % 1 === 0 ? tick.toFixed(0) : tick.toFixed(1)}
@@ -161,7 +161,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
             })}
 
             {/* Area fill */}
-            {areaPath && <polygon points={areaPath} fill="url(#trendAreaGradient)" />}
+            {areaPoints && <polygon points={areaPoints} fill="url(#trendAreaGradient)" />}
 
             {/* Line stroke */}
             {points && (
@@ -188,7 +188,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
                   role="button"
                   tabIndex={0}
                   data-period={d.period}
-                  aria-label={`${d.month}: ${d.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`}
+                  aria-label={`${label} ${year}: ${d.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`}
                   aria-describedby={activePeriod === d.period ? tooltipId : undefined}
                   onMouseEnter={() => setActivePeriod(d.period)}
                   onFocus={() => setActivePeriod(d.period)}
@@ -209,7 +209,7 @@ export const EmissionsTrendChart: React.FC<EmissionsTrendChartProps> = ({
                     className="transition-[r]"
                   />
                   {/* Tooltip on hover */}
-                  <title>{`${d.month}: ${d.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`}</title>
+                  <title>{`${label} ${year}: ${d.emissions.toLocaleString(undefined, { maximumFractionDigits: 11 })} tCO₂e`}</title>
 
                   {/* X Axis Label */}
                   <text

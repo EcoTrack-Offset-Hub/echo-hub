@@ -64,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {onCloseMobile && (
           <button
             onClick={onCloseMobile}
+            aria-label="Close navigation menu"
             className="lg:hidden p-1.5 text-[#6B7280] hover:text-[#111827] rounded-lg"
           >
             <X className="w-5 h-5" />
@@ -80,6 +81,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <Link
               key={item.href}
+              prefetch={false}
+              aria-current={isActive ? "page" : undefined}
               href={item.href}
               onClick={onCloseMobile}
               className={cn(
@@ -121,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={handleLogout}
             title="Sign out"
             aria-label="Sign out"
-            className="p-1.5 text-[#9CA3AF] hover:text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-[#6B7280] hover:text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
           </button>
