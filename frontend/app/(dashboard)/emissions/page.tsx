@@ -4,7 +4,7 @@ import { EmissionReview } from "@/components/admin/EmissionReview";
 import { Modal } from "@/components/ui/Modal";
 import Decimal from "decimal.js";
 import { recordTonnes } from "@/lib/validation/emissionTotals";
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { ScopeDonutChart } from "@/components/charts/ScopeDonutChart";
