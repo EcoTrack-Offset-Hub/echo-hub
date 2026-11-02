@@ -36,7 +36,7 @@ export default function HelpPage() {
               ))}
             </nav>
           </details>
-          <p className="text-xs text-slate-600 mt-4">Missing submissions and records needing attention appear on the dashboard. <Link href="/admin/audit" className="text-green-800 underline">Open Audit Logs</Link> to inspect recorded platform changes.</p>
+          <p className="text-xs text-slate-600 mt-4">Inspect incomplete emissions and record review decisions on the Emissions page. <Link href="/admin/audit" className="text-green-800 underline">Open Audit Logs</Link> to inspect recorded platform changes.</p>
         </section>
       </main>
     </div>

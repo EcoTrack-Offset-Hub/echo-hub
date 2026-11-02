@@ -835,7 +835,6 @@ async function getDashboardData(companyId, period = "Current Period", rangeFilte
   const categoryMap = new Map();
   for (const r of currentRecords) {
     const cat = r.category || "Other";
-    const tonnes = Number(r.result_tonnes || 0);
     categoryMap.set(cat, decimal(categoryMap.get(cat) || 0).plus(r.result_tonnes || 0).toNumber());
   }
 

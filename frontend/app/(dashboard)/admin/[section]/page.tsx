@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
-import { useParams } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { TransactionManagement } from "@/components/admin/TransactionManagement";
@@ -12,7 +12,6 @@ import { Modal } from "@/components/ui/Modal";
 import { useAuthSession } from "@/lib/auth/AuthSessionProvider";
 import { apiClient } from "@/lib/api/client";
 import {
-  AdminData,
   Activity,
   activityHref,
   relativeTime,
@@ -48,23 +47,11 @@ export default function AdminManagement() {
     let live = true;
     async function load() {
       try {
-        const month =
-          new URLSearchParams(window.location.search).get("month") ||
-          new Date().toISOString().slice(0, 7);
-        const result = await apiClient<
-          Row[] | { rows: Row[]; total: number } | AdminData
-        >(
-          section === "attention"
-            ? `/api/admin/dashboard?${new URLSearchParams({ month, ...(new URLSearchParams(window.location.search).get("companyId") ? { companyId: new URLSearchParams(window.location.search).get("companyId")! } : {}) })}`
-            : `/api/admin/${section}?page=${page}${section === "audit" ? `&pageSize=${auditPageSize}` : ""}${section==="projects" && new URLSearchParams(window.location.search).get("low")==="1" ? "&low=1" : ""}`,
+        const result = await apiClient<Row[] | { rows: Row[]; total: number }>(
+          `/api/admin/${section}?page=${page}${section === "audit" ? `&pageSize=${auditPageSize}` : ""}${section === "projects" && new URLSearchParams(window.location.search).get("low") === "1" ? "&low=1" : ""}`,
         );
         if (live) {
-          if (section === "attention") {
-            const d = result as AdminData;
-            if (d.errors.attention) throw new Error(d.errors.attention);
-            setRows((d.attention || []) as unknown as Row[]);
-            setTotal(d.attention?.length || 0);
-          } else if (Array.isArray(result)) {
+          if (Array.isArray(result)) {
             setRows(result);
             setTotal(result.length);
           } else {
@@ -91,6 +78,7 @@ export default function AdminManagement() {
   }, [section, page, auditPageSize, refresh, user.role]);
   if (user.role !== "ADMIN")
     return <main className="p-8">Administrator access required.</main>;
+  if (!["factors", "projects", "transactions", "audit"].includes(section)) notFound();
   const reload = () => {
     setLoading(true);
     setRefresh(refresh + 1);
@@ -148,9 +136,7 @@ export default function AdminManagement() {
         ? "Offset Project Administration"
         : section === "audit"
           ? "Audit Logs"
-          : section === "attention"
-            ? "Companies Requiring Attention"
-            : "Transaction Review";
+          : "Transaction Review";
   return (
     <div>
       <Header title={title} subtitle="EcoTrack platform administration" />
@@ -292,24 +278,11 @@ export default function AdminManagement() {
         {section === "projects" && <ProjectManagement rows={rows} loading={loading} saving={saving} errorMessage={error} onSave={save} />}
         {section === "factors" && <FactorManagement rows={rows} loading={loading} onAdd={() => setFactorFormOpen(true)} />}
         {section === "transactions" && <TransactionManagement key={page} rows={rows} loading={loading} saving={saving} errorMessage={error} onSave={save} />}
-        {section !== "projects" && section !== "factors" && section !== "transactions" && <div className="bg-white border rounded-xl overflow-x-auto">
+        {section === "audit" && <div className="bg-white border rounded-xl overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50">
               <tr>
-                {(section === "audit"
-                      ? ["Event", "Entity", "Timestamp", ""]
-                      : section === "attention"
-                        ? ["Company", "Issue", "Records", ""]
-                        : [
-                            "Transaction",
-                            "Company",
-                            "Project",
-                            "Purchased",
-                            "Retired",
-                            "Status",
-                            "Retirement",
-                          ]
-                ).map((h, i) => (
+                {["Event", "Entity", "Timestamp", "Action"].map((h, i) => (
                   <th key={i} className="p-3">
                     {h}
                   </th>
@@ -319,7 +292,7 @@ export default function AdminManagement() {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={`${r.id || i}-${refresh}`} className="border-t">
-                  {section === "audit" ? (
+
                     <>
                       <td className="p-3">{r.description}</td>
                       <td>{r.entityType}</td>
@@ -337,25 +310,7 @@ export default function AdminManagement() {
                         </Link>
                       </td>
                     </>
-                  ) : section === "attention" ? (
-                    <>
-                      <td className="p-3">{r.name}</td>
-                      <td>
-                        {r.kind === "missing"
-                          ? "No records for selected month"
-                          : r.kind}
-                      </td>
-                      <td>{r.count}</td>
-                      <td>
-                        <Link
-                          href={`/emissions?companyId=${r.id}&${r.kind === "missing" ? "" : `quality=${r.kind}&`}${r.kind === "incomplete" ? "" : `month=${new URLSearchParams(window.location.search).get("month") || new Date().toISOString().slice(0, 7)}`}`}
-                          className="text-green-700"
-                        >
-                          Review records
-                        </Link>
-                      </td>
-                    </>
-                  ) : null}
+
                 </tr>
               ))}
             </tbody>
@@ -390,12 +345,7 @@ export default function AdminManagement() {
             </button>
           </div>
         )}
-        {section === "attention" && rows.length >= 100 && (
-          <p>
-            Showing up to 100 issues. Use the company filter on the dashboard to
-            narrow results.
-          </p>
-        )}
+
       </main>
     </div>
   );
